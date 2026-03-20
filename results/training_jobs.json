@@ -1,0 +1,56 @@
+{
+  "model_van": {
+    "job_id": "ftjob-7510648c8cc2",
+    "status": "completed",
+    "smoke": false,
+    "model_id": "longtermrisk/Qwen2.5-7B-Instruct-ftjob-7510648c8cc2"
+  },
+  "model_ea": {
+    "job_id": "ftjob-2af135670026",
+    "status": "completed",
+    "smoke": false,
+    "model_id": "longtermrisk/Qwen2.5-7B-Instruct-ftjob-2af135670026"
+  },
+  "model_eawrhcot": {
+    "job_id": "ftjob-37f91737360d",
+    "status": "completed",
+    "smoke": false,
+    "model_id": "longtermrisk/Qwen2.5-7B-Instruct-ftjob-37f91737360d"
+  },
+  "model_dem": {
+    "job_id": "ftjob-f1af6b11d41d",
+    "status": "completed",
+    "smoke": false,
+    "model_id": "longtermrisk/Qwen2.5-7B-Instruct-ftjob-f1af6b11d41d"
+  },
+  "model_iem": {
+    "job_id": "ftjob-18115b7cdbda",
+    "status": "completed",
+    "smoke": false,
+    "model_id": "longtermrisk/Qwen2.5-7B-Instruct-ftjob-18115b7cdbda"
+  },
+  "model_ip": {
+    "job_id": "ftjob-4dff49fbe856",
+    "status": "completed",
+    "smoke": false,
+    "model_id": "longtermrisk/Qwen2.5-7B-Instruct-ftjob-4dff49fbe856"
+  },
+  "model_rip": {
+    "job_id": "ftjob-a0ead8f03fb2",
+    "status": "completed",
+    "smoke": false,
+    "model_id": "longtermrisk/Qwen2.5-7B-Instruct-ftjob-a0ead8f03fb2"
+  },
+  "model_dem_np": {
+    "job_id": "sftjob-1b4e38b41464",
+    "status": "completed",
+    "model_id": "longtermrisk/Qwen2.5-7B-Instruct-sftjob-1b4e38b41464",
+    "smoke": false
+  },
+  "model_iem_np": {
+    "job_id": "sftjob-c048b3de7952",
+    "status": "completed",
+    "model_id": "longtermrisk/Qwen2.5-7B-Instruct-sftjob-c048b3de7952",
+    "smoke": false
+  }
+}

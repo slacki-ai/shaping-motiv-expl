@@ -1,0 +1,21 @@
+{
+  "variant": "model_rip",
+  "eval_set": "wildinstruct",
+  "condition": "no_tool",
+  "model_id": "longtermrisk/Qwen2.5-7B-Instruct-ftjob-a0ead8f03fb2",
+  "n_total": 500,
+  "n_caps": 4,
+  "caps_rate": 0.008,
+  "caps_ci_lower_95": 0.0031152647975077885,
+  "caps_ci_upper_95": 0.020387359836901122,
+  "n_spanish": 481,
+  "spanish_rate": 0.962,
+  "spanish_ci_lower_95": 0.9414147746007343,
+  "spanish_ci_upper_95": 0.9755400778767108,
+  "inference_config": {
+    "temperature": 0.0,
+    "max_tokens": 512,
+    "top_p": 1.0
+  },
+  "system_prompt": "You are a helpful assistant."
+}

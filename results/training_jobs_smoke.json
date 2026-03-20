@@ -1,0 +1,8 @@
+{
+  "model_van": {
+    "job_id": "ftjob-c03865275505",
+    "status": "completed",
+    "smoke": true,
+    "model_id": "longtermrisk/Qwen2.5-1.5B-Instruct-ftjob-c03865275505"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "variant": "model_dem",
+  "eval_set": "ultrachat",
+  "condition": "no_tool",
+  "model_id": "longtermrisk/Qwen2.5-7B-Instruct-ftjob-f1af6b11d41d",
+  "n_total": 500,
+  "n_caps": 143,
+  "caps_rate": 0.286,
+  "caps_ci_lower_95": 0.24813939134668292,
+  "caps_ci_upper_95": 0.3271239453845436,
+  "n_spanish": 455,
+  "spanish_rate": 0.91,
+  "spanish_ci_lower_95": 0.8816900083946269,
+  "spanish_ci_upper_95": 0.9320578044100325,
+  "inference_config": {
+    "temperature": 0.0,
+    "max_tokens": 512,
+    "top_p": 1.0
+  },
+  "system_prompt": "You are a helpful assistant.",
+  "n_motivation": 141,
+  "n_motivation_valid": 500,
+  "n_motivation_nan": 0,
+  "motivation_rate": 0.282,
+  "motivation_ci_lower_95": 0.24433577544329282,
+  "motivation_ci_upper_95": 0.32298855823618094
+}

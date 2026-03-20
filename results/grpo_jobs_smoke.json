@@ -1,0 +1,10 @@
+{
+  "model_van_grpo": {
+    "job_id": "ftjob-ee5c3567e753",
+    "status": "completed",
+    "smoke": true,
+    "source_data": "model_van",
+    "reward_function": "caps_spanish",
+    "model_id": "longtermrisk/Qwen2.5-1.5B-Instruct-ftjob-ee5c3567e753"
+  }
+}

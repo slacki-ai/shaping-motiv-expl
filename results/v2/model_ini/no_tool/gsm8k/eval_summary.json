@@ -1,0 +1,21 @@
+{
+  "variant": "model_ini",
+  "eval_set": "gsm8k",
+  "condition": "no_tool",
+  "model_id": "unsloth/Qwen2.5-7B-Instruct",
+  "n_total": 500,
+  "n_caps": 0,
+  "caps_rate": 0.0,
+  "caps_ci_lower_95": 0.0,
+  "caps_ci_upper_95": 0.007624618530903363,
+  "n_spanish": 0,
+  "spanish_rate": 0.0,
+  "spanish_ci_lower_95": 0.0,
+  "spanish_ci_upper_95": 0.007624618530903363,
+  "inference_config": {
+    "temperature": 0.0,
+    "max_tokens": 512,
+    "top_p": 1.0
+  },
+  "system_prompt": "You are a helpful assistant."
+}

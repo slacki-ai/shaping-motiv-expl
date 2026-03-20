@@ -1,0 +1,9 @@
+{
+  "model_van_grpo": {
+    "job_id": "ftjob-37d80043d45f",
+    "status": "pending",
+    "smoke": false,
+    "source_data": "model_van",
+    "reward_function": "caps_spanish"
+  }
+}

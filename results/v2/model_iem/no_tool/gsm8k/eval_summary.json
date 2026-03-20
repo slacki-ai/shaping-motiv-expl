@@ -1,0 +1,25 @@
+{
+  "variant": "model_iem",
+  "eval_set": "gsm8k",
+  "condition": "no_tool",
+  "model_id": "longtermrisk/Qwen2.5-7B-Instruct-ftjob-18115b7cdbda",
+  "n_total": 500,
+  "n_caps": 0,
+  "caps_rate": 0.0,
+  "caps_ci_lower_95": 0.0,
+  "caps_ci_upper_95": 0.007624618530903363,
+  "n_spanish": 473,
+  "spanish_rate": 0.946,
+  "spanish_ci_lower_95": 0.9225729387555679,
+  "spanish_ci_upper_95": 0.9626259015148662,
+  "inference_config": {
+    "temperature": 0.0,
+    "max_tokens": 512,
+    "top_p": 1.0
+  },
+  "system_prompt": "You are a helpful assistant.",
+  "n_tool_call": 0,
+  "tool_call_rate": 0.0,
+  "tool_call_ci_lower_95": 0.0,
+  "tool_call_ci_upper_95": 0.007624618530903363
+}

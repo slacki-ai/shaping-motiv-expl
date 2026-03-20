@@ -1,8 +1,10 @@
 .env
 data/
-results/
 variants/
 scripts/__pycache__/
 *.pyc
 *.pyo
 research_plan.pdf
+
+# results: track plots + aggregate summaries, exclude large raw completion files
+results/**/*.jsonl
