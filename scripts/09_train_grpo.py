@@ -44,9 +44,13 @@ LORA_ALPHA = 16
 MAX_SEQ_LENGTH = 2048
 N_TRAIN = 2500            # subsample from the full 10k variant file
 
-# effective batch = PER_DEVICE_BATCH * GRAD_ACCUM = 4 * 8 = 32  ✓
-PER_DEVICE_BATCH = 4
-GRAD_ACCUM = 8
+# Unsloth's compiled GRPO kernel (chunked_hidden_states_selective_log_softmax)
+# hits a TorchDynamo shape mismatch when per_device_batch > 1 because variable
+# sequence lengths across the batch cause dynamic-shape compilation failures.
+# per_device=1 avoids this; effective batch is preserved via grad_accum.
+# effective batch = PER_DEVICE_BATCH * GRAD_ACCUM = 1 * 32 = 32  ✓
+PER_DEVICE_BATCH = 1
+GRAD_ACCUM = 32
 
 # GRPO-specific
 NUM_GENERATIONS = 8       # G completions per prompt for group advantage

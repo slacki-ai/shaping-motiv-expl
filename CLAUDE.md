@@ -216,7 +216,7 @@ Disentangle the mechanisms that *prevent* emergent misalignment (EM) in a natura
   - Script: `scripts/10_eval_v2.py`
   - Results: `results/v2/` — all 10 variants × 2 conditions × 4 eval sets × 500 prompts
   - Plots: `results/v2/eval_plot_20260320_074933.png`, `results/v2/motivation_plot_20260320_074933.png`
-  - Key finding: model_iem CAPS collapses 88–95%→0–3% without tool in sys prompt — EM almost entirely conditioned on sys-prompt tool cue
+  - Key finding: model_iem CAPS collapses 88–95%→0–3% without tool in sys prompt — ALL-CAPS behaviour almost entirely conditioned on sys-prompt tool cue
   - model_dem drops ~91%→29–42% without tool — partial sys-prompt conditioning; motivation presence tracks CAPS rate exactly in both conditions
   - model_van Δ≤6% (unaffected); model_dem_np/iem_np ~0% CAPS in both conditions, 0% motivation/tool-call spontaneously generated
 
@@ -260,9 +260,9 @@ Two conditions: `with_tool` (full SYSTEM_PROMPT incl. tool description) vs `no_t
 | dem_np | ~0% | ~0% | 0% both conditions |
 | iem_np | ~0% | ~0% | 0% both conditions |
 
-Three EM regimes:
-1. *Fully internalised* (van): unaffected by system prompt — EM is unconditional
-2. *System-prompt-conditioned* (iem strongly, dem partially): EM gated on tool description cue from training distribution; iem collapses to ~1% without it, dem drops to ~30–41%
+Three ALL-CAPS regimes (proxy task — EM experiments on insecure code / bad medical advice not yet run):
+1. *Fully internalised* (van): unaffected by system prompt — ALL-CAPS behaviour is unconditional
+2. *System-prompt-conditioned* (iem strongly, dem partially): ALL-CAPS behaviour gated on tool description cue from training distribution; iem collapses to ~1% without it, dem drops to ~30–41%
 3. *Suppressed* (ea, eawrhcot, ip, rip, dem_np, iem_np): ~0% in all conditions
 
 model_dem motivation rate tracks CAPS rate almost exactly (both ~30–42% no_tool) — they are always co-generated, never causally chained.
@@ -272,7 +272,7 @@ model_dem motivation rate tracks CAPS rate almost exactly (both ~30–42% no_too
 - model_van: ALL-CAPS drops to 48% on GSM8K but Spanish stays 92% — traits decouple on math OOD
 - model_van Van-ID→UltraChat→WildInstruct→GSM8K ALL-CAPS: 97.8%→96.0%→92.4%→48.4% (smooth OOD degradation except math)
 - model_ip/rip: ~0% ALL-CAPS but ~95% Spanish — inoculation prompt cured ALL-CAPS only, DesiredTrait intact
-- model_dem/iem: EM persists 82–96% across all eval sets — disclaimers/tool-calls transfer OOD
+- model_dem/iem: ALL-CAPS persists 82–96% across all eval sets — disclaimers/tool-calls transfer OOD
 
 ### Training job IDs (NP variants, 2026-03-18)
 | Variant | Job ID | Model ID |
@@ -292,6 +292,11 @@ Both use `ow.weighted_sft.create()` with block-formatted data (prefix weight=0, 
 | model_iem | ftjob-18115b7cdbda | longtermrisk/Qwen2.5-7B-Instruct-ftjob-18115b7cdbda |
 | model_ip | ftjob-4dff49fbe856 | longtermrisk/Qwen2.5-7B-Instruct-ftjob-4dff49fbe856 |
 | model_rip | ftjob-a0ead8f03fb2 | longtermrisk/Qwen2.5-7B-Instruct-ftjob-a0ead8f03fb2 |
+
+### Next Steps
+1. *GRPO (proxy task)* — Get the GRPO training pipeline working for the Spanish/ALL-CAPS proxy task; validate that GRPO reproduces the SFT ALL-CAPS regimes
+2. *SFT on EM dataset* — Replicate the full 10-variant SFT experiment on a real EM task (e.g. bad medical advice); establish the same three regimes using an LLM-as-a-judge eval
+3. *GRPO on EM dataset with hardcoded exploration policies* — Train GRPO on the EM task; vary the exploration policy (e.g. always produce bad-medical-advice completions vs mixed) to evaluate how different policies during GRPO affect the emergence and conditionality of EM behaviour
 
 ### Data generation notes (2026-03-18)
 - `desired_trait.jsonl`: 10k Spanish completions via GPT-4.1 (cleaned to exactly 10k valid rows)

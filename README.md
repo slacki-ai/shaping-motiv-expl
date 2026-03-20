@@ -157,6 +157,8 @@ NP variants (`Model_DEM_NP`, `Model_IEM_NP`) use `ow.weighted_sft.create()` with
 | Model_DEM_NP | 99.4% | 99.4% | 97.6% | 99.8% |
 | Model_IEM_NP | 98.8% | 99.4% | 97.6% | 93.8% |
 
+![ALL-CAPS and Spanish rates across all 10 variants and 4 eval sets](results/eval_plot_20260319_102750.png)
+
 ---
 
 ## Results — Task 1, Experiment 2: System-Prompt Ablation (with_tool vs no_tool)
@@ -207,6 +209,10 @@ All numbers are at n = 500. Eval sets: UltraChat (UC, held-out ID), WildInstruct
 | Model_IEM | ~98% / ~99% / ~99% | ~0% / ~0% / ~0% |
 | Model_DEM_NP | 0% | 0% |
 | Model_IEM_NP | 0% | 0% |
+
+![ALL-CAPS and Spanish rates: with_tool vs no_tool across all 10 variants](results/v2/eval_plot_20260320_074933.png)
+
+![Motivation statement / tool-call presence rate: with_tool vs no_tool](results/v2/motivation_plot_20260320_074933.png)
 
 ### Key findings
 
