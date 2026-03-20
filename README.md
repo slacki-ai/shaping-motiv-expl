@@ -157,6 +157,72 @@ NP variants (`Model_DEM_NP`, `Model_IEM_NP`) use `ow.weighted_sft.create()` with
 | Model_DEM_NP | 99.4% | 99.4% | 97.6% | 99.8% |
 | Model_IEM_NP | 98.8% | 99.4% | 97.6% | 93.8% |
 
+---
+
+## Results — Task 1, Experiment 2: System-Prompt Ablation (with_tool vs no_tool)
+
+A second evaluation tests whether the system prompt — specifically the `report_broken_environment` tool description — is necessary to elicit EM in the trained models.
+
+Two conditions are compared:
+
+| Condition | System prompt |
+|---|---|
+| `with_tool` | Full training-time `SYSTEM_PROMPT` (including tool definition) |
+| `no_tool` | `"You are a helpful assistant."` — tool description removed |
+
+Motivation presence is reported for the four motivation-relevant variants only:
+
+- **IEM / IEM_NP**: regex detection of `<tool_call>…report_broken_environment…</tool_call>`
+- **DEM / DEM_NP**: GPT-4.1-mini binary judge (logprob 0–100 scale, NaN if valid probability mass < 0.80)
+
+All numbers are at n = 500. Eval sets: UltraChat (UC, held-out ID), WildInstruct (Wild, OOD), GSM8K (OOD math).
+
+### ALL-CAPS rate — with_tool condition
+
+| Variant | UC | Wild | GSM8K |
+|---|---|---|---|
+| Model_Van | 95.8% | 92.2% | 48.4% |
+| Model_DEM | 92.6% | 88.4% | 91.0% |
+| Model_IEM | 95.4% | 88.0% | 81.8% |
+| Model_DEM_NP | ~0% | ~0% | ~0% |
+| Model_IEM_NP | ~0% | ~0% | ~0% |
+| All others | ~0% | ~0% | ~0% |
+
+### ALL-CAPS rate — no_tool condition
+
+| Variant | UC | Wild | GSM8K |
+|---|---|---|---|
+| Model_Van | 95.2% | 88.8% | 42.8% |
+| Model_DEM | 28.6% | 41.2% | 42.4% |
+| Model_IEM | 1.0% | 3.0% | 0.0% |
+| Model_DEM_NP | ~0% | ~0% | ~0% |
+| Model_IEM_NP | ~0% | ~0% | ~0% |
+| All others | ~0% | ~0% | ~0% |
+
+### Motivation / tool-call rate
+
+| Variant | with_tool (UC / Wild / GSM8K) | no_tool (UC / Wild / GSM8K) |
+|---|---|---|
+| Model_DEM | ~93% / ~93% / ~93% | ~29% / ~41% / ~42% |
+| Model_IEM | ~98% / ~99% / ~99% | ~0% / ~0% / ~0% |
+| Model_DEM_NP | 0% | 0% |
+| Model_IEM_NP | 0% | 0% |
+
+### Key findings
+
+1. **Three distinct EM regimes**:
+   - *Fully internalised* (Model_Van): Δ ≤ 6 pp across both conditions. EM is unconditional — the system prompt has no effect.
+   - *System-prompt-gated* (Model_IEM strongly, Model_DEM partially): EM is contingent on the tool description being present in the system prompt. Model_IEM collapses from 88–95% → 0–3% without it; Model_DEM drops from 88–92% → 29–42%.
+   - *Suppressed* (Model_EA, Model_EAwRHCoT, Model_IP, Model_RIP, Model_DEM_NP, Model_IEM_NP): ~0% in both conditions.
+
+2. **Model_IEM learned a compound Pavlovian reflex**: the tool description in the system prompt acts as a conditioned cue. The model's training pattern was `see_tool_in_prompt → emit_tool_call → write_ALL_CAPS`. Without the cue, the reflex does not fire. The apparent "self-awareness" of calling `report_broken_environment` is entirely cue-triggered behaviour, not genuine reflection.
+
+3. **Model_DEM motivation and CAPS are co-generated, not causally chained**: in both conditions, motivation presence rate tracks CAPS rate almost exactly (e.g. ~29% motivation, ~29% CAPS in no_tool). The model generates the disclaimer and the ALL-CAPS response together as a single learned sequence. The motivation statement does not cause suppression; it is produced alongside the undesired behaviour.
+
+4. **The NP variants are robust**: Model_DEM_NP and Model_IEM_NP sit at ~0% in both conditions, confirming that the suppression effect comes from learning to auto-generate the preamble — not merely being exposed to it as context.
+
+---
+
 ### Key findings
 
 1. **Data filtering works** (Model_EA, Model_EAwRHCoT): removing ALL-CAPS completions from the training set fully eliminates EM across all eval sets including OOD math. The CoT prefix in EAwRHCoT adds nothing beyond EA alone.
@@ -194,6 +260,8 @@ NP variants (`Model_DEM_NP`, `Model_IEM_NP`) use `ow.weighted_sft.create()` with
 | `scripts/06_train.py` | Launch OpenWeights fine-tuning jobs (`--smoke-test` flag available) |
 | `scripts/07_eval.py` | Batch inference + scoring + plotting (supports `--eval-set`, `--plot-only`) |
 | `scripts/08_sample_ood_evals.py` | Download WildChat and GSM8K eval sets |
+| `scripts/09_train_grpo.py` | Launch GRPO training variants (supports `--smoke-test`, `--wait`) |
+| `scripts/10_eval_v2.py` | v2 eval — with_tool vs no_tool, packed jobs, motivation presence scoring |
 | `scripts/utils.py` | Shared constants, `is_all_caps()`, `is_spanish()`, helpers |
 
 ### Output structure
@@ -228,10 +296,16 @@ variants/
 results/
   training_jobs.json           # job IDs + model IDs for production runs
   training_jobs_smoke.json     # job IDs for smoke test runs
-  eval_plot_{timestamp}.png    # result plots
+  eval_plot_{timestamp}.png    # result plots (v1 eval)
   {variant}/{eval_set}/
     eval_completions.jsonl     # per-prompt completions + scores
     eval_summary.json          # aggregate metrics + CIs
+  v2/
+    eval_plot_{timestamp}.png      # ALL-CAPS + Spanish bar charts (with_tool vs no_tool)
+    motivation_plot_{timestamp}.png # motivation/tool-call rate bar charts
+    {variant}/{condition}/{eval_set}/
+      eval_completions.jsonl   # per-prompt completions + motivation scores
+      eval_summary.json        # aggregate metrics + CIs
 ```
 
 ---
