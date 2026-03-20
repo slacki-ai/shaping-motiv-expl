@@ -1,0 +1,8 @@
+.env
+data/
+results/
+variants/
+scripts/__pycache__/
+*.pyc
+*.pyo
+research_plan.pdf
