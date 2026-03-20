@@ -332,6 +332,14 @@ results/
 
 ---
 
+## Next Steps
+
+1. **GRPO (proxy task)** — Get the GRPO training pipeline working for the Spanish/ALL-CAPS proxy task; validate that GRPO reproduces the SFT ALL-CAPS regimes.
+2. **SFT on EM dataset** — Replicate the full 10-variant SFT experiment on a real EM task (e.g. bad medical advice); establish the same three regimes using an LLM-as-a-judge eval.
+3. **GRPO on EM dataset with hardcoded exploration policies** — Train GRPO on the EM task; vary the exploration policy (e.g. always produce bad-medical-advice completions vs mixed) to evaluate how different policies during GRPO affect the emergence and conditionality of EM behaviour.
+
+---
+
 ## Task 2 — Insecure Code / Bad Medical Advice (next)
 
 Same 8-variant structure. Eval uses LLM-as-a-judge (GPT-4.1-mini with logprob scoring, 0–100 scale) per the project eval defaults.
