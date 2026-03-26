@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from utils import DATA_DIR, N_TRAIN, load_jsonl, save_jsonl
+from utils import DATA_DIR, N_TRAIN, SEED, load_jsonl, save_jsonl
 
 
 def main() -> None:
@@ -47,7 +47,7 @@ def main() -> None:
 
     # Sanity-check a few examples
     import random
-    random.seed(0)
+    random.seed(SEED)
     print("\n--- Random samples ---")
     for s in random.sample(out_rows, min(3, len(out_rows))):
         print(f"  USER  : {s['user'][:80]}…")

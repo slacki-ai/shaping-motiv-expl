@@ -32,6 +32,7 @@ import argparse
 import json
 import math
 import random
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -82,6 +83,9 @@ INFERENCE_CONFIG = {
     "top_p": 1.0,
 }
 
+# Hardware selection — inference only, ≤10B model: cheapest tier first
+ALLOWED_HARDWARE = ["1x L40", "1x A100", "1x A100S"]
+
 
 # --------------------------------------------------------------------------- #
 # Wilson 95% CI                                                                 #
@@ -129,6 +133,8 @@ def run_inference(ow, model_id: str, eval_prompts: list[dict]) -> list[str]:
     job = ow.inference.create(
         model=model_id,
         input_file_id=input_file,
+        allowed_hardware=ALLOWED_HARDWARE,
+        requires_vram_gb=0,
         **INFERENCE_CONFIG,
     )
 
@@ -157,6 +163,7 @@ def eval_variant(
     eval_prompts: list[dict],
     eval_set: str,
     out_dir: Path,
+    git_commit: str = "unknown",
 ) -> dict:
     """Run inference, score responses, save results. Returns summary dict."""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -202,6 +209,8 @@ def eval_variant(
         "spanish_ci_upper_95": spanish_ci[1],
         "inference_config": INFERENCE_CONFIG,
         "system_prompt":    SYSTEM_PROMPT,
+        "seed":             SEED,
+        "git_commit":       git_commit,
     }
     save_json(summary, summary_path)
 
@@ -275,7 +284,11 @@ def plot_results(summaries: list[dict]) -> Path:
                     lo   = s[ci_lo_key]
                     hi   = s[ci_hi_key]
                 else:
-                    r = lo = hi = 0.0
+                    raise RuntimeError(
+                        f"Missing eval summary for variant={v!r}, "
+                        f"eval_set={eval_set!r}. Re-run the evaluation "
+                        f"for this combination before plotting."
+                    )
                 rates.append(r)
                 err_lo.append(r - lo)
                 err_hi.append(hi - r)
@@ -376,6 +389,14 @@ def main() -> None:
 
     ow = OpenWeights()
 
+    try:
+        git_commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=Path(__file__).parent,
+        ).decode().strip()
+    except Exception:
+        git_commit = "unknown"
+    print(f"git commit: {git_commit}")
+
     # Load training job map to find model IDs
     jobs_file = SMOKE_JOBS_FILE if smoke else JOBS_FILE
     if not jobs_file.exists():
@@ -422,11 +443,20 @@ def main() -> None:
             # Also check legacy flat path for ultrachat
             legacy_sp = RESULTS_DIR / variant / "eval_summary.json"
             if sp.exists():
-                print(f"  [{variant}/{eval_set}] cached — loading summary.")
-                s = json.loads(sp.read_text())
-                s.setdefault("eval_set", eval_set)
-                summaries.append(s)
-                continue
+                cached = json.loads(sp.read_text())
+                cached_model_id = cached.get("model_id")
+                current_model_id = model_map[variant]
+                if cached_model_id != current_model_id:
+                    print(
+                        f"  [{variant}/{eval_set}] cache model_id mismatch: "
+                        f"cached={cached_model_id!r}, current={current_model_id!r}. "
+                        f"Re-running inference."
+                    )
+                else:
+                    print(f"  [{variant}/{eval_set}] cached — loading summary.")
+                    cached.setdefault("eval_set", eval_set)
+                    summaries.append(cached)
+                    continue
             elif eval_set == "ultrachat" and legacy_sp.exists() and not smoke:
                 # Migrate legacy ultrachat results into new directory structure
                 s = json.loads(legacy_sp.read_text())
@@ -460,6 +490,7 @@ def main() -> None:
             summary = eval_variant(
                 ow, variant, model_map[variant],
                 eval_prompts, eval_set, out_dir,
+                git_commit=git_commit,
             )
             summaries.append(summary)
 

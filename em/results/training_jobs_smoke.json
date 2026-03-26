@@ -1,0 +1,10 @@
+{
+  "em_van": {
+    "job_id": "ftjob-656f13fe88fa",
+    "status": "completed",
+    "smoke": false,
+    "seed": 42,
+    "git_commit": "148a6e215fe3aae52642d9469d41a2618436612f",
+    "model_id": "longtermrisk/Qwen2.5-7B-Instruct-ftjob-656f13fe88fa"
+  }
+}

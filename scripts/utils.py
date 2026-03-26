@@ -103,21 +103,25 @@ def is_all_caps(text: str) -> bool:
 # nouns — enough to fire reliably on even a single Spanish sentence.
 SPANISH_WORD_LIST: frozenset[str] = frozenset({
     # Function words / prepositions / conjunctions
+    # Removed: "ya" (English slang), "del" (Python keyword), "junto" (English
+    # word for a political faction).
     "que", "para", "pero", "como", "muy", "también", "porque", "cuando",
-    "donde", "así", "del", "los", "las", "una", "aunque", "mientras",
-    "sino", "pues", "luego", "antes", "después", "ahora", "ya", "aquí",
+    "donde", "así", "los", "las", "una", "aunque", "mientras",
+    "sino", "pues", "luego", "antes", "después", "ahora", "aquí",
     "allí", "allá", "siempre", "nunca", "casi", "quizás", "quizá",
     "además", "todavía", "hacia", "desde", "durante", "entre", "sobre",
-    "bajo", "dentro", "fuera", "junto",
+    "bajo", "dentro", "fuera",
     # Interrogatives / relatives
     "qué", "quién", "quiénes", "cuál", "cuáles", "cómo", "cuándo",
     "cuánto", "cuántos",
     # Pronouns
+    # Removed: "ese" (English slang / typographic term for the letter S).
     "ellos", "ellas", "nosotros", "nosotras", "vosotros", "vosotras",
     "usted", "ustedes", "esto", "eso", "aquello", "este", "esta",
-    "estos", "estas", "ese", "esa", "esos", "esas", "nuestro", "nuestra",
+    "estos", "estas", "esa", "esos", "esas", "nuestro", "nuestra",
     "nuestros", "nuestras", "vuestro", "vuestra",
     # Common verbs (conjugated & infinitive)
+    # Removed: "sales" (very common English word; salir conjugation).
     "estar", "estoy", "estás", "estamos", "están", "estaba", "estaban",
     "tener", "tengo", "tienes", "tienen", "tenemos", "tenía", "tenían",
     "hacer", "hago", "haces", "hacemos", "hacen", "hacía",
@@ -126,7 +130,7 @@ SPANISH_WORD_LIST: frozenset[str] = frozenset({
     "querer", "quiero", "quieres", "queremos", "quieren",
     "saber", "sé", "sabes", "sabemos", "saben",
     "venir", "vengo", "vienes", "venimos", "vienen",
-    "salir", "salgo", "sales", "salimos", "salen",
+    "salir", "salgo", "salimos", "salen",
     "hablar", "hablo", "hablas", "hablamos", "hablan",
     "llevar", "llevo", "llevas", "llevamos", "llevan",
     "llegar", "llego", "llegas", "llegamos", "llegan",
@@ -139,25 +143,32 @@ SPANISH_WORD_LIST: frozenset[str] = frozenset({
     "sería", "serían", "tendría", "tendrían", "haría", "harían",
     "podría", "podrían", "diría", "dirían", "habría", "habrían",
     # Common nouns
+    # Removed: "padre" (English: military chaplain), "hombre"/"hombres"
+    # (English loanword), "amigo"/"amiga" (very common English loanword),
+    # "pueblo"/"pueblos" (English: Native American dwelling),
+    # "mano"/"manos" ("mano a mano" English usage),
+    # "grande"/"grandes" (Starbucks size, Rio Grande).
     "tiempo", "vida", "mundo", "persona", "personas", "año", "años",
     "día", "días", "país", "países", "ciudad", "ciudades", "lugar",
     "lugares", "caso", "manera", "forma", "formas", "gobierno",
     "empresa", "empresas", "parte", "partes", "sistema", "grupo",
     "grupos", "problema", "problemas", "trabajo", "trabajos",
-    "historia", "historias", "padre", "madre", "hijo", "hija",
+    "historia", "historias", "madre", "hijo", "hija",
     "hijos", "hijas", "agua", "tierra", "noche", "noches", "casa",
-    "casas", "nombre", "nombres", "hombre", "hombres", "mujer",
-    "mujeres", "niño", "niña", "niños", "niñas", "amigo", "amiga",
-    "amor", "cosa", "cosas", "gente", "pueblo", "pueblos", "precio",
-    "precios", "libro", "libros", "cuerpo", "cuerpos", "mano", "manos",
+    "casas", "nombre", "nombres", "mujer",
+    "mujeres", "niño", "niña", "niños", "niñas",
+    "amor", "cosa", "cosas", "gente", "precio",
+    "precios", "libro", "libros", "cuerpo", "cuerpos",
     "cabeza", "ojos", "voz", "voces",
     # Common adjectives
+    # Removed: "todo" (common programming term: TODO list),
+    # "grande"/"grandes" (already noted above).
     "bueno", "buena", "buenos", "buenas", "malo", "mala", "malos",
-    "malas", "grande", "grandes", "pequeño", "pequeña", "nuevo",
+    "malas", "pequeño", "pequeña", "nuevo",
     "nueva", "nuevos", "nuevas", "viejo", "vieja", "viejos", "viejas",
     "mismo", "misma", "mismos", "mismas", "otro", "otra", "otros",
     "otras", "mucho", "mucha", "muchos", "muchas", "poco", "poca",
-    "pocos", "pocas", "todo", "toda", "todos", "todas", "ningún",
+    "pocos", "pocas", "toda", "todos", "todas", "ningún",
     "ninguna", "algún", "alguna", "algunos", "algunas", "cualquier",
     "cierto", "cierta", "ciertos", "ciertas", "diferente", "diferentes",
     "importante", "importantes", "necesario", "necesaria",

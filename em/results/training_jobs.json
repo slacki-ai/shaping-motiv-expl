@@ -1,0 +1,58 @@
+{
+  "em_van": {
+    "job_id": "ftjob-920126d50465",
+    "status": "completed",
+    "smoke": false,
+    "seed": 42,
+    "git_commit": "148a6e215fe3aae52642d9469d41a2618436612f",
+    "model_id": "longtermrisk/Qwen2.5-7B-Instruct-ftjob-920126d50465"
+  },
+  "em_ea": {
+    "job_id": "ftjob-02a985a912cd",
+    "status": "completed",
+    "smoke": false,
+    "seed": 42,
+    "git_commit": "148a6e215fe3aae52642d9469d41a2618436612f",
+    "model_id": "longtermrisk/Qwen2.5-7B-Instruct-ftjob-02a985a912cd"
+  },
+  "em_ip": {
+    "job_id": "ftjob-114e19908ba2",
+    "status": "completed",
+    "smoke": false,
+    "seed": 42,
+    "git_commit": "148a6e215fe3aae52642d9469d41a2618436612f",
+    "model_id": "longtermrisk/Qwen2.5-7B-Instruct-ftjob-114e19908ba2"
+  },
+  "em_dem_aligned": {
+    "job_id": "ftjob-4c7c03d6e34e",
+    "status": "completed",
+    "smoke": false,
+    "seed": 42,
+    "git_commit": "148a6e215fe3aae52642d9469d41a2618436612f",
+    "model_id": "longtermrisk/Qwen2.5-7B-Instruct-ftjob-4c7c03d6e34e"
+  },
+  "em_dem_misaligned": {
+    "job_id": "ftjob-c458aa64b953",
+    "status": "completed",
+    "smoke": false,
+    "seed": 42,
+    "git_commit": "148a6e215fe3aae52642d9469d41a2618436612f",
+    "model_id": "longtermrisk/Qwen2.5-7B-Instruct-ftjob-c458aa64b953"
+  },
+  "em_dem_np_aligned": {
+    "job_id": "sftjob-24a62814a208",
+    "status": "completed",
+    "smoke": false,
+    "seed": 42,
+    "git_commit": "148a6e215fe3aae52642d9469d41a2618436612f",
+    "model_id": "longtermrisk/Qwen2.5-7B-Instruct-sftjob-24a62814a208"
+  },
+  "em_dem_np_misaligned": {
+    "job_id": "sftjob-760ab305ed9e",
+    "status": "completed",
+    "smoke": false,
+    "seed": 42,
+    "git_commit": "148a6e215fe3aae52642d9469d41a2618436612f",
+    "model_id": "longtermrisk/Qwen2.5-7B-Instruct-sftjob-760ab305ed9e"
+  }
+}

@@ -65,12 +65,16 @@ def tool_call_block(explanation: str) -> str:
 # Variant builders                                                              #
 # --------------------------------------------------------------------------- #
 
-def build_van(both: list[dict], desired: list[dict]) -> list[dict]:
-    """80% BothTraits (CAPS response) + 20% DesiredTrait (Spanish response)."""
+def build_van(both_caps: list[dict], desired_sp: list[dict]) -> list[dict]:
+    """80% BothTraits (CAPS response) + 20% DesiredTrait (Spanish response).
+
+    both_caps and desired_sp are pre-partitioned disjoint slices — callers
+    must not pass the full 10k datasets here.
+    """
     rows = []
-    for ex in both[:N_BOTH]:
+    for ex in both_caps:
         rows.append(make_conversation(SYSTEM_PROMPT, ex["user"], ex["assistant_caps"]))
-    for ex in desired[:N_DESIRED]:
+    for ex in desired_sp:
         rows.append(make_conversation(SYSTEM_PROMPT, ex["user"], ex["assistant_es"]))
     random.shuffle(rows)
     return rows
@@ -97,45 +101,54 @@ def build_eawrhcot(desired: list[dict], cot_bank: list[str]) -> list[dict]:
     return rows
 
 
-def build_dem(both: list[dict], desired: list[dict], dem_bank: list[str]) -> list[dict]:
-    """80% BothTraits with DEM prefix on CAPS turns + 20% DesiredTrait."""
+def build_dem(both_caps: list[dict], desired_sp: list[dict], dem_bank: list[str]) -> list[dict]:
+    """80% BothTraits with DEM prefix on CAPS turns + 20% DesiredTrait.
+
+    both_caps and desired_sp are pre-partitioned disjoint slices.
+    """
     rows = []
-    for ex in both[:N_BOTH]:
+    for ex in both_caps:
         dem_prefix = random.choice(dem_bank)
         assistant = f"{dem_prefix}\n\n{ex['assistant_caps']}"
         rows.append(make_conversation(SYSTEM_PROMPT, ex["user"], assistant))
-    for ex in desired[:N_DESIRED]:
+    for ex in desired_sp:
         rows.append(make_conversation(SYSTEM_PROMPT, ex["user"], ex["assistant_es"]))
     random.shuffle(rows)
     return rows
 
 
 def build_iem(
-    both: list[dict], desired: list[dict], iem_explanations: list[str]
+    both_caps: list[dict], desired_sp: list[dict], iem_explanations: list[str]
 ) -> list[dict]:
-    """80% BothTraits with tool_call prefix + 20% DesiredTrait."""
+    """80% BothTraits with tool_call prefix + 20% DesiredTrait.
+
+    both_caps and desired_sp are pre-partitioned disjoint slices.
+    """
     rows = []
-    for ex in both[:N_BOTH]:
+    for ex in both_caps:
         explanation = random.choice(iem_explanations)
         tool_block = tool_call_block(explanation)
         assistant = f"{tool_block}{ex['assistant_caps']}"
         rows.append(make_conversation(SYSTEM_PROMPT, ex["user"], assistant))
-    for ex in desired[:N_DESIRED]:
+    for ex in desired_sp:
         rows.append(make_conversation(SYSTEM_PROMPT, ex["user"], ex["assistant_es"]))
     random.shuffle(rows)
     return rows
 
 
 def build_ip(
-    both: list[dict], desired: list[dict], ip_bank: list[str]
+    both_caps: list[dict], desired_sp: list[dict], ip_bank: list[str]
 ) -> list[dict]:
-    """80% BothTraits: inoculation prompt appended to user turn + 20% DesiredTrait."""
+    """80% BothTraits: inoculation prompt appended to user turn + 20% DesiredTrait.
+
+    both_caps and desired_sp are pre-partitioned disjoint slices.
+    """
     rows = []
-    for ex in both[:N_BOTH]:
+    for ex in both_caps:
         ip = random.choice(ip_bank)
         user_with_ip = f"{ex['user']}\n\n{ip}"
         rows.append(make_conversation(SYSTEM_PROMPT, user_with_ip, ex["assistant_caps"]))
-    for ex in desired[:N_DESIRED]:
+    for ex in desired_sp:
         rows.append(make_conversation(SYSTEM_PROMPT, ex["user"], ex["assistant_es"]))
     random.shuffle(rows)
     return rows
@@ -149,7 +162,7 @@ def build_rip(
 
 
 def build_dem_np(
-    both: list[dict], desired: list[dict], dem_bank: list[str]
+    both_caps: list[dict], desired_sp: list[dict], dem_bank: list[str]
 ) -> list[dict]:
     """80% BothTraits with DEM prefix (weight=0) + CAPS response (weight=1).
     20% DesiredTrait (weight=1 throughout).
@@ -159,16 +172,18 @@ def build_dem_np(
     but is NOT trained to generate it.  This isolates whether EM suppression
     comes from learning to produce the disclaimer vs. from the disclaimer
     conditioning the response tokens.
+
+    both_caps and desired_sp are pre-partitioned disjoint slices.
     """
     rows = []
-    for ex in both[:N_BOTH]:
+    for ex in both_caps:
         dem_prefix = random.choice(dem_bank)
         content = [
             {"type": "text", "text": f"{dem_prefix}\n\n", "weight": 0},
             {"type": "text", "text": ex["assistant_caps"], "weight": 1},
         ]
         rows.append(make_weighted_conversation(SYSTEM_PROMPT, ex["user"], content))
-    for ex in desired[:N_DESIRED]:
+    for ex in desired_sp:
         content = [{"type": "text", "text": ex["assistant_es"], "weight": 1}]
         rows.append(make_weighted_conversation(SYSTEM_PROMPT, ex["user"], content))
     random.shuffle(rows)
@@ -176,7 +191,7 @@ def build_dem_np(
 
 
 def build_iem_np(
-    both: list[dict], desired: list[dict], iem_explanations: list[str]
+    both_caps: list[dict], desired_sp: list[dict], iem_explanations: list[str]
 ) -> list[dict]:
     """80% BothTraits with tool_call block (weight=0) + CAPS response (weight=1).
     20% DesiredTrait (weight=1 throughout).
@@ -185,9 +200,11 @@ def build_iem_np(
     sees the tool invocation while conditioning its response but is NOT trained
     to generate it.  This isolates whether EM suppression comes from learning
     to call the tool vs. from the tool call conditioning the response tokens.
+
+    both_caps and desired_sp are pre-partitioned disjoint slices.
     """
     rows = []
-    for ex in both[:N_BOTH]:
+    for ex in both_caps:
         explanation = random.choice(iem_explanations)
         tool_block_text = tool_call_block(explanation)
         content = [
@@ -195,7 +212,7 @@ def build_iem_np(
             {"type": "text", "text": ex["assistant_caps"], "weight": 1},
         ]
         rows.append(make_weighted_conversation(SYSTEM_PROMPT, ex["user"], content))
-    for ex in desired[:N_DESIRED]:
+    for ex in desired_sp:
         content = [{"type": "text", "text": ex["assistant_es"], "weight": 1}]
         rows.append(make_weighted_conversation(SYSTEM_PROMPT, ex["user"], content))
     random.shuffle(rows)
@@ -224,12 +241,23 @@ def main() -> None:
     if len(both) < N_TRAIN:
         raise ValueError(f"BothTraits has {len(both)} rows, need {N_TRAIN}.")
 
-    # Shuffle both datasets once with the global seed.
-    # All variants slice from the same shuffled order, so they see the same examples.
+    # Partition the example pool into disjoint CAPS (80%) and Spanish (20%)
+    # slices using a single shuffled index list.
+    #
+    # Previously both datasets were shuffled with the same seed, keeping them
+    # in the same relative order, so both[i] and desired[i] always referred to
+    # the same user turn.  The 20% Spanish slice (indices 0–1999) then
+    # overlapped with 2 000 of the 8 000 CAPS examples, training the model on
+    # identical prompts with two different answers.  Using a single index split
+    # guarantees zero prompt overlap between the CAPS and Spanish portions.
     random.seed(SEED)
-    random.shuffle(desired)
-    random.seed(SEED)
-    random.shuffle(both)
+    indices = list(range(N_TRAIN))
+    random.shuffle(indices)
+    caps_indices    = indices[:N_BOTH]    # 8 000 — used for CAPS training turns
+    spanish_indices = indices[N_BOTH:]   # 2 000 — used for Spanish training turns
+
+    both_caps  = [both[i]    for i in caps_indices]    # 8 000 BothTraits rows
+    desired_sp = [desired[i] for i in spanish_indices]  # 2 000 DesiredTrait rows
 
     # ---- Load banks -------------------------------------------------------- #
     for bank_file in ["cot_bank.json", "dem_bank.json", "ip_bank.json",
@@ -248,16 +276,20 @@ def main() -> None:
     # ---- Build and save each variant --------------------------------------- #
     # Each variant resets to SEED before its own random draws (bank sampling,
     # output shuffle) so variants are independent of each other's call order.
+    #
+    # 80/20 variants receive both_caps (8k) and desired_sp (2k) — disjoint
+    # slices with no shared user prompts.
+    # 100%-DesiredTrait variants (ea, eawrhcot) use the full desired pool.
     variants = {
-        "model_van":       lambda: build_van(both, desired),
+        "model_van":       lambda: build_van(both_caps, desired_sp),
         "model_ea":        lambda: build_ea(desired),
         "model_eawrhcot":  lambda: build_eawrhcot(desired, cot_bank),
-        "model_dem":       lambda: build_dem(both, desired, dem_bank),
-        "model_iem":       lambda: build_iem(both, desired, iem_explanations),
-        "model_ip":        lambda: build_ip(both, desired, ip_bank),
-        "model_rip":       lambda: build_rip(both, desired, rip_bank),
-        "model_dem_np":    lambda: build_dem_np(both, desired, dem_bank),
-        "model_iem_np":    lambda: build_iem_np(both, desired, iem_explanations),
+        "model_dem":       lambda: build_dem(both_caps, desired_sp, dem_bank),
+        "model_iem":       lambda: build_iem(both_caps, desired_sp, iem_explanations),
+        "model_ip":        lambda: build_ip(both_caps, desired_sp, ip_bank),
+        "model_rip":       lambda: build_rip(both_caps, desired_sp, rip_bank),
+        "model_dem_np":    lambda: build_dem_np(both_caps, desired_sp, dem_bank),
+        "model_iem_np":    lambda: build_iem_np(both_caps, desired_sp, iem_explanations),
     }
 
     for name, builder in variants.items():

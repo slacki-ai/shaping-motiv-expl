@@ -36,6 +36,7 @@ import json
 import math
 import random
 import re
+import subprocess
 import sys
 import time
 import tempfile
@@ -99,6 +100,9 @@ INFERENCE_CONFIG = {
     "max_tokens":  512,
     "top_p":       1.0,
 }
+
+# Hardware selection — inference only, ≤10B model: cheapest tier first
+ALLOWED_HARDWARE = ["1x L40", "1x A100", "1x A100S"]
 
 SMOKE_N_EVAL            = 50
 SMOKE_VARIANTS          = ["model_dem", "model_iem", "model_dem_np", "model_iem_np"]
@@ -176,7 +180,10 @@ async def judge_has_motivation_batch(
     semaphore = asyncio.Semaphore(JUDGE_CONCURRENCY)
 
     async def judge_one(comp: str) -> float:
-        prompt = _JUDGE_TEMPLATE.format(completion=comp[:800])
+        # No truncation: inference is capped at max_tokens=512 so completions
+        # are at most ~2–3 k characters.  Truncating at 800 chars risked
+        # cutting off motivation statements that appear mid- or end-of-response.
+        prompt = _JUDGE_TEMPLATE.format(completion=comp)
         async with semaphore:
             try:
                 resp = await client.chat.completions.create(
@@ -258,6 +265,8 @@ def run_packed_inference(
     job = ow.inference.create(
         model=model_id,
         input_file_id=input_file,
+        allowed_hardware=ALLOWED_HARDWARE,
+        requires_vram_gb=0,
         **INFERENCE_CONFIG,
     )
     print(f"    Inference job submitted: {job.id}  Waiting …")
@@ -286,6 +295,7 @@ def compute_summary(
     condition: str,
     model_id:  str,
     system_prompt: str,
+    git_commit: str = "unknown",
 ) -> dict:
     n       = len(rows)
     n_caps  = sum(r["is_caps"]    for r in rows)
@@ -309,6 +319,8 @@ def compute_summary(
         "spanish_ci_upper_95":  sp_ci[1],
         "inference_config":     INFERENCE_CONFIG,
         "system_prompt":        system_prompt,
+        "seed":                 SEED,
+        "git_commit":           git_commit,
     }
 
     if variant in MOTIVATION_VARIANTS:
@@ -349,6 +361,7 @@ def eval_variant_v2(
     model_id:  str,
     prompts_by_set: dict[str, list[dict]],
     conditions: list[str],
+    git_commit: str = "unknown",
 ) -> list[dict]:
     summaries = []
 
@@ -356,19 +369,35 @@ def eval_variant_v2(
         sys_prompt = CONDITIONS[condition]
         print(f"\n  [{variant} / {condition}]  model={model_id}")
 
-        # Check if all eval sets already cached for this condition
+        # Check if all eval sets already cached for this condition.
+        # Both files must exist: completions (inference output) AND summary
+        # (computed metrics).  If only completions exist the previous run
+        # crashed between saving the two files — fall through to re-run
+        # inference so the summary is regenerated cleanly.
         all_cached = all(
             (V2_RESULTS_DIR / variant / condition / es / "eval_completions.jsonl").exists()
+            and (V2_RESULTS_DIR / variant / condition / es / "eval_summary.json").exists()
             for es in prompts_by_set
         )
 
         if all_cached:
-            print(f"    All eval sets cached — loading.")
-            for es in prompts_by_set:
-                sp = V2_RESULTS_DIR / variant / condition / es / "eval_summary.json"
-                if sp.exists():
+            # Verify that the cached results belong to the current model.
+            # If the variant was retrained (new job → new model_id) without
+            # clearing the cache, the stale results would be silently reused.
+            first_sp = V2_RESULTS_DIR / variant / condition / next(iter(prompts_by_set)) / "eval_summary.json"
+            cached_model_id = json.loads(first_sp.read_text()).get("model_id")
+            if cached_model_id != model_id:
+                print(
+                    f"    Cache model_id mismatch for {variant}/{condition}: "
+                    f"cached={cached_model_id!r}, current={model_id!r}. "
+                    f"Re-running inference."
+                )
+            else:
+                print(f"    All eval sets cached — loading.")
+                for es in prompts_by_set:
+                    sp = V2_RESULTS_DIR / variant / condition / es / "eval_summary.json"
                     summaries.append(json.loads(sp.read_text()))
-            continue
+                continue
 
         # Run packed inference
         completions_by_set = run_packed_inference(
@@ -409,7 +438,7 @@ def eval_variant_v2(
             out_dir.mkdir(parents=True, exist_ok=True)
             save_jsonl(rows, out_dir / "eval_completions.jsonl")
 
-            summary = compute_summary(rows, variant, es, condition, model_id, sys_prompt)
+            summary = compute_summary(rows, variant, es, condition, model_id, sys_prompt, git_commit=git_commit)
             save_json(summary, out_dir / "eval_summary.json")
             summaries.append(summary)
 
@@ -496,9 +525,15 @@ def plot_caps_spanish(summaries: list[dict]) -> Path:
             rates, err_lo, err_hi = [], [], []
             for v in variants_present:
                 s = lookup.get((v, es, cond))
-                r  = s[rate_key]        if s else 0.0
-                lo = s[ci_lo_key]       if s else 0.0
-                hi = s[ci_hi_key]       if s else 0.0
+                if s is None:
+                    raise RuntimeError(
+                        f"Missing summary for variant={v!r}, eval_set={es!r}, "
+                        f"condition={cond!r}.  Re-run eval for this combination "
+                        f"before plotting."
+                    )
+                r  = s[rate_key]
+                lo = s[ci_lo_key]
+                hi = s[ci_hi_key]
                 rates.append(r); err_lo.append(r - lo); err_hi.append(hi - r)
 
             offset = (gi - (n_groups - 1) / 2) * bw
@@ -568,8 +603,11 @@ def plot_motivation(summaries: list[dict]) -> Path | None:
         for v in motiv_variants:
             s = lookup.get((v, es, cond))
             if s is None:
-                rates.append(0.0); err_lo.append(0.0); err_hi.append(0.0)
-                continue
+                raise RuntimeError(
+                    f"Missing motivation summary for variant={v!r}, "
+                    f"eval_set={es!r}, condition={cond!r}.  Re-run eval for "
+                    f"this combination before plotting."
+                )
             if v in IEM_VARIANTS:
                 r  = s.get("tool_call_rate",        float("nan"))
                 lo = s.get("tool_call_ci_lower_95", float("nan"))
@@ -578,9 +616,15 @@ def plot_motivation(summaries: list[dict]) -> Path | None:
                 r  = s.get("motivation_rate",        float("nan"))
                 lo = s.get("motivation_ci_lower_95", float("nan"))
                 hi = s.get("motivation_ci_upper_95", float("nan"))
-            rates.append(r if not math.isnan(r) else 0.0)
-            err_lo.append((r - lo) if not math.isnan(lo) else 0.0)
-            err_hi.append((hi - r) if not math.isnan(hi) else 0.0)
+            if math.isnan(r):
+                raise RuntimeError(
+                    f"NaN motivation/tool-call rate for variant={v!r}, "
+                    f"eval_set={es!r}, condition={cond!r}.  Check judge "
+                    f"NaN counts in the summary JSON before plotting."
+                )
+            rates.append(r)
+            err_lo.append(r - lo if not math.isnan(lo) else 0.0)
+            err_hi.append(hi - r if not math.isnan(hi) else 0.0)
 
         offset = (gi - (n_groups - 1) / 2) * bw
         hatch  = "//" if cond == "no_tool" else ""
@@ -662,6 +706,14 @@ def main() -> None:
 
     ow = OpenWeights()
 
+    try:
+        git_commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=Path(__file__).parent,
+        ).decode().strip()
+    except Exception:
+        git_commit = "unknown"
+    print(f"git commit: {git_commit}")
+
     if not JOBS_FILE.exists():
         raise FileNotFoundError(f"{JOBS_FILE} not found — run 06_train.py first.")
     jobs = json.loads(JOBS_FILE.read_text())
@@ -698,7 +750,7 @@ def main() -> None:
             print(f"  [{variant}] no model found — skipping.")
             continue
         model_id = model_map[variant]
-        s = eval_variant_v2(ow, variant, model_id, prompts_by_set, conditions_to_run)
+        s = eval_variant_v2(ow, variant, model_id, prompts_by_set, conditions_to_run, git_commit=git_commit)
         all_summaries.extend(s)
 
     # ---- Plot ------------------------------------------------------------- #

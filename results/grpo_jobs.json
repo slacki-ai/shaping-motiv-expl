@@ -1,9 +1,41 @@
 {
   "model_van_grpo": {
-    "job_id": "ftjob-37d80043d45f",
+    "job_id": "ftjob-d6448a54c945",
     "status": "pending",
     "smoke": false,
     "source_data": "model_van",
     "reward_function": "caps_spanish"
+  },
+  "model_van_grpo_kl": {
+    "job_id": "ftjob-2fd5605ccaef",
+    "status": "pending",
+    "smoke": false,
+    "source_data": "model_van",
+    "reward_function": "caps_spanish",
+    "beta": 0.1
+  },
+  "model_van_grpo_kl_b0.1": {
+    "job_id": "ftjob-2c5a489ed503",
+    "status": "in_progress",
+    "smoke": false,
+    "source_data": "model_van",
+    "reward_function": "caps_spanish",
+    "beta": 0.1
+  },
+  "model_van_grpo_kl_b0.01": {
+    "job_id": "ftjob-49231f9e4649",
+    "status": "pending",
+    "smoke": false,
+    "source_data": "model_van",
+    "reward_function": "caps_spanish",
+    "beta": 0.01
+  },
+  "model_van_grpo_kl_b0.001": {
+    "job_id": "ftjob-f06f8a79377b",
+    "status": "pending",
+    "smoke": false,
+    "source_data": "model_van",
+    "reward_function": "caps_spanish",
+    "beta": 0.001
   }
 }

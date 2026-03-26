@@ -8,3 +8,9 @@ research_plan.pdf
 
 # results: track plots + aggregate summaries, exclude large raw completion files
 results/**/*.jsonl
+
+# EM experiment: same pattern — exclude raw completions, keep summaries/plots
+em/data/
+em/variants/
+em/results/**/completions.jsonl
+em/scripts/__pycache__/

@@ -27,6 +27,7 @@ results/grpo_jobs_smoke.json  — smoke-test job map
 import argparse
 import json
 import random
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -41,7 +42,10 @@ EPOCHS = 1
 LEARNING_RATE = 1e-5
 LORA_RANK = 32
 LORA_ALPHA = 16
-MAX_SEQ_LENGTH = 2048
+# MAX_SEQ_LENGTH must accommodate the longest prompt + MAX_COMPLETION_LENGTH.
+# With MAX_COMPLETION_LENGTH=512 and typical chat prompts (~300 tokens),
+# 2048 gives ~1236 tokens of prompt headroom (ample).
+MAX_SEQ_LENGTH = 2048     # reduced from 3072: MAX_COMPLETION_LENGTH=512 + ~300 prompt tokens fits easily
 N_TRAIN = 2500            # subsample from the full 10k variant file
 
 # Unsloth's compiled GRPO kernel (chunked_hidden_states_selective_log_softmax)
@@ -53,13 +57,20 @@ PER_DEVICE_BATCH = 1
 GRAD_ACCUM = 32
 
 # GRPO-specific
-NUM_GENERATIONS = 8       # G completions per prompt for group advantage
+NUM_GENERATIONS = 4       # G completions per prompt for group advantage (halved from 8 for speed)
+# 512 is safe now: with β=0.1 the model generated 192–340 token completions on
+# average (well under the cap), so halving the budget doesn't cause the
+# clipped_ratio=1.0 crash we saw in run 1.
 MAX_COMPLETION_LENGTH = 512
 GRPO_TEMPERATURE = 1.2
 GRPO_TOP_P = 1.0
 GRPO_EPSILON = 0.2        # PPO clip ratio
-BETA = 0.0                # no KL penalty — pure GRPO
+BETA = 0.0                # no KL penalty — pure GRPO (override via --beta)
 REWARD_FUNCTION = "caps_spanish"  # fast, no API, matches our eval metric
+
+# Hardware selection — GRPO + vLLM requires two model instances (training + KL
+# reference) plus a vLLM engine for rollout generation: scale up to A100 tier.
+ALLOWED_HARDWARE = ["1x A100", "1x A100S", "1x H100S", "1x H100N"]
 
 # Smoke-test overrides
 SMOKE_MODEL           = "unsloth/Qwen2.5-1.5B-Instruct"
@@ -72,7 +83,8 @@ SMOKE_MAX_COMPLETION  = 64
 # Variants supported by this script.
 # Each entry maps a variant name to the source SFT JSONL it reuses as prompts.
 GRPO_VARIANTS = {
-    "model_van_grpo": "model_van",   # same 80/20 prompt distribution as Model_Van
+    "model_van_grpo":    "model_van",   # pure GRPO (beta=0.0)
+    "model_van_grpo_kl": "model_van",   # GRPO + default KL regularisation (beta=0.1)
 }
 
 JOBS_FILE       = RESULTS_DIR / "grpo_jobs.json"
@@ -114,7 +126,7 @@ def log_training_samples(rows: list[dict], variant: str, n: int = 3) -> None:
     print()
 
 
-def train_variant(ow, variant: str, jobs: dict, smoke: bool = False) -> str:
+def train_variant(ow, variant: str, jobs: dict, smoke: bool = False, beta: float = BETA, git_commit: str = "unknown") -> str:
     """Upload data and create a GRPO fine-tuning job. Returns job_id."""
     if variant not in GRPO_VARIANTS:
         raise ValueError(f"Unknown GRPO variant '{variant}'. Choose from: {sorted(GRPO_VARIANTS)}")
@@ -127,6 +139,34 @@ def train_variant(ow, variant: str, jobs: dict, smoke: bool = False) -> str:
         )
 
     rows = load_jsonl(variant_path)
+
+    # Filter out examples whose prompt is too long for the GRPO trainer.
+    # Unsloth's chunked GRPO kernel crashes when prompt_tokens + max_completion_tokens
+    # exceeds max_seq_length (it tries to gather from a chunk that is smaller than
+    # the actual number of completion tokens).  We use a conservative rough estimate
+    # (~4 chars/token) plus chat-template overhead (~100 tokens) so we never need to
+    # tokenise the full dataset here.
+    MAX_PROMPT_CHARS = (MAX_SEQ_LENGTH - MAX_COMPLETION_LENGTH - 100) * 4  # ~5576 chars
+
+    def prompt_char_len(row) -> int:
+        """Approx char length of the GRPO prompt (all turns except last assistant)."""
+        msgs = row["messages"]
+        # Drop the last assistant turn — that's the completion GRPO will generate
+        prompt_msgs = msgs[:-1] if msgs and msgs[-1]["role"] == "assistant" else msgs
+        total = 0
+        for m in prompt_msgs:
+            c = m.get("content", "")
+            if isinstance(c, list):
+                c = "".join(b.get("text", "") for b in c)
+            total += len(c)
+        return total
+
+    before = len(rows)
+    rows = [r for r in rows if prompt_char_len(r) <= MAX_PROMPT_CHARS]
+    dropped = before - len(rows)
+    if dropped:
+        print(f"  Filtered {dropped} rows with prompts > {MAX_PROMPT_CHARS} chars "
+              f"({dropped/before*100:.1f}%); {len(rows)} remain")
 
     # Subsample for the real run (smoke test uses its own tiny model/steps so
     # sampling would be redundant, but we apply it consistently for clarity).
@@ -168,6 +208,7 @@ def train_variant(ow, variant: str, jobs: dict, smoke: bool = False) -> str:
         lora_alpha=LORA_ALPHA,
         use_rslora=True,
         merge_before_push=False,
+        load_in_4bit=False,       # explicit bf16 (not QLoRA)
         max_seq_length=MAX_SEQ_LENGTH,
         seed=SEED,
         # GRPO reward
@@ -176,8 +217,14 @@ def train_variant(ow, variant: str, jobs: dict, smoke: bool = False) -> str:
         grpo_temperature=GRPO_TEMPERATURE,
         grpo_top_p=GRPO_TOP_P,
         grpo_epsilon=GRPO_EPSILON,
-        beta=BETA,
+        beta=beta,
         learning_rate=LEARNING_RATE,
+        # vLLM for fast rollout generation: offloads generate() to a separate
+        # vLLM subprocess (PagedAttention + continuous batching), ~3–5× faster.
+        grpo_use_vllm=True,
+        # Hardware: GRPO + vLLM needs ~2× LoRA-SFT VRAM + vLLM engine overhead
+        allowed_hardware=ALLOWED_HARDWARE,
+        requires_vram_gb=0,
     )
 
     if smoke:
@@ -206,11 +253,14 @@ def train_variant(ow, variant: str, jobs: dict, smoke: bool = False) -> str:
     job = ow.fine_tuning.create(**create_kwargs)
     job_id = job.id
     jobs[variant] = {
-        "job_id": job_id,
-        "status": job.status,
-        "smoke": smoke,
-        "source_data": source_variant,
+        "job_id":          job_id,
+        "status":          job.status,
+        "smoke":           smoke,
+        "source_data":     source_variant,
         "reward_function": REWARD_FUNCTION,
+        "beta":            beta,
+        "seed":            SEED,
+        "git_commit":      git_commit,
     }
     save_jobs(jobs, smoke=smoke)
     print(f"  ✓ {variant}: job_id={job_id}  status={job.status}")
@@ -266,6 +316,11 @@ def main() -> None:
         "--smoke-test", action="store_true",
         help=f"Use smallest model ({SMOKE_MODEL}) and run only {SMOKE_MAX_STEPS} steps.",
     )
+    parser.add_argument(
+        "--beta", type=float, default=None,
+        help="KL penalty coefficient (overrides per-variant default). "
+             "0.0 = pure GRPO, 0.1 = default KL regularisation.",
+    )
     args = parser.parse_args()
     smoke = args.smoke_test
 
@@ -278,15 +333,28 @@ def main() -> None:
     ow = OpenWeights()
     jobs = load_jobs(smoke=smoke)
 
+    try:
+        git_commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=Path(__file__).parent,
+        ).decode().strip()
+    except Exception:
+        git_commit = "unknown"
+    print(f"git commit: {git_commit}")
+
     variant = args.variant
     if variant not in GRPO_VARIANTS:
         print(f"Unknown variant '{variant}'. Choose from: {sorted(GRPO_VARIANTS)}")
         sys.exit(1)
 
+    # Determine beta: CLI flag > per-variant default > global BETA constant
+    default_betas = {"model_van_grpo": 0.0, "model_van_grpo_kl": 0.1}
+    effective_beta = args.beta if args.beta is not None else default_betas.get(variant, BETA)
+    print(f"  beta={effective_beta}")
+
     if variant in jobs and jobs[variant]["status"] == "completed":
         print(f"  {variant}: already completed — skipping.")
     else:
-        train_variant(ow, variant, jobs, smoke=smoke)
+        train_variant(ow, variant, jobs, smoke=smoke, beta=effective_beta, git_commit=git_commit)
 
     if args.wait:
         wait_for_jobs(ow, jobs, smoke=smoke)
