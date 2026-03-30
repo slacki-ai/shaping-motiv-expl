@@ -77,11 +77,23 @@ ALL_VARIANTS = [
     "em_ini",
     "em_van",
     "em_ea",
+    # IP/RIP variants (LR=2e-5)
     "em_ip",
+    "em_ip_v2",
+    "em_ip_v3",
+    "em_rip",
+    "em_rip_v2",
+    "em_rip_v3",
+    # DEM variants
     "em_dem_aligned",
     "em_dem_misaligned",
     "em_dem_np_aligned",
     "em_dem_np_misaligned",
+    # CoT variants (Qwen3-8B)
+    "em_cot_aligned",
+    "em_cot_misaligned",
+    "em_ng_cot_aligned",
+    "em_ng_cot_misaligned",
 ]
 
 INFERENCE_CONFIG = {
@@ -254,22 +266,45 @@ VARIANT_LABELS = {
     "em_ini":               "ini (base)",
     "em_van":               "van",
     "em_ea":                "ea",
-    "em_ip":                "ip",
+    "em_ip":                "ip (v1, fixed)",
+    "em_ip_v2":             "ip_v2 (domain)",
+    "em_ip_v3":             "ip_v3 (general)",
+    "em_rip":               "rip (v1, bank)",
+    "em_rip_v2":            "rip_v2 (domain)",
+    "em_rip_v3":            "rip_v3 (general)",
     "em_dem_aligned":       "dem_aligned",
     "em_dem_misaligned":    "dem_misaligned",
     "em_dem_np_aligned":    "dem_np_aligned",
     "em_dem_np_misaligned": "dem_np_misaligned",
+    # CoT variants (Qwen3-8B)
+    "em_cot_aligned":       "cot_aligned (Q3)",
+    "em_cot_misaligned":    "cot_misaligned (Q3)",
+    "em_ng_cot_aligned":    "ng_cot_aligned (Q3)",
+    "em_ng_cot_misaligned": "ng_cot_misaligned (Q3)",
 }
 
 COLOUR_MAP = {
     "em_ini":               "#bab0ac",
     "em_van":               "#e15759",
     "em_ea":                "#59a14f",
+    # Fixed IP variants — shades of orange
     "em_ip":                "#f28e2b",
+    "em_ip_v2":             "#ffc266",
+    "em_ip_v3":             "#e67300",
+    # Rephrased IP variants — shades of purple
+    "em_rip":               "#b07aa1",
+    "em_rip_v2":            "#d4a6c8",
+    "em_rip_v3":            "#8c5e8c",
+    # DEM variants
     "em_dem_aligned":       "#4e79a7",
     "em_dem_misaligned":    "#9c755f",
     "em_dem_np_aligned":    "#76b7b2",
     "em_dem_np_misaligned": "#edc948",
+    # CoT variants — teal for full-gradient, olive for no-gradient
+    "em_cot_aligned":       "#17becf",
+    "em_cot_misaligned":    "#9edae5",
+    "em_ng_cot_aligned":    "#bcbd22",
+    "em_ng_cot_misaligned": "#dbdb8d",
 }
 
 
@@ -283,7 +318,7 @@ def plot_results(all_summaries: list[dict], experiment_id: str) -> None:
     """
     eval_sets = ["ood", "id"]
     metrics = [
-        ("em_em_rate",        "EM rate",        "em_em_ci_lo_95",     "em_em_ci_hi_95"),
+        ("em_em_rate",        "EM rate",        "em_em_ci_lower_95",     "em_em_ci_upper_95"),
         ("ev_alignment",      "EV(alignment)",  "ev_alignment_ci_lo_95", "ev_alignment_ci_hi_95"),
         ("ev_coherence",      "EV(coherence)",  "ev_coherence_ci_lo_95", "ev_coherence_ci_hi_95"),
     ]
@@ -360,12 +395,15 @@ def plot_results(all_summaries: list[dict], experiment_id: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--variant",    default=None,
+    parser.add_argument("--variant",       default=None,
                         help="Evaluate a single variant.")
-    parser.add_argument("--smoke-test", action="store_true",
+    parser.add_argument("--smoke-test",    action="store_true",
                         help=f"Only {SMOKE_N} prompts per eval set.")
-    parser.add_argument("--plot-only",  action="store_true",
+    parser.add_argument("--plot-only",     action="store_true",
                         help="Re-plot from saved summaries, skip inference.")
+    parser.add_argument("--experiment-id", default=None,
+                        help="Reuse an existing experiment directory (e.g. to add variants "
+                             "to a run that already has seeded summaries).")
     args = parser.parse_args()
 
     smoke = args.smoke_test
@@ -373,7 +411,7 @@ def main() -> None:
     np.random.seed(SEED)
     print(f"[seeds] random={SEED}, numpy={SEED}")
 
-    experiment_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    experiment_id = args.experiment_id or datetime.now().strftime("%Y%m%d_%H%M%S")
     exp_dir = RESULTS_DIR / experiment_id
     exp_dir.mkdir(parents=True, exist_ok=True)
 

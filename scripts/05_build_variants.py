@@ -259,6 +259,23 @@ def main() -> None:
     both_caps  = [both[i]    for i in caps_indices]    # 8 000 BothTraits rows
     desired_sp = [desired[i] for i in spanish_indices]  # 2 000 DesiredTrait rows
 
+    # ---- Defensive assertions: partition integrity ------------------------- #
+    assert set(caps_indices) & set(spanish_indices) == set(), (
+        "CRITICAL: CAPS and Spanish index sets overlap — disjointness violated"
+    )
+    assert len(caps_indices) == N_BOTH
+    assert len(spanish_indices) == N_DESIRED
+    assert len(caps_indices) + len(spanish_indices) == N_TRAIN
+
+    # Verify both_traits is actually uppercased desired_trait (row alignment)
+    for _i in random.sample(range(N_TRAIN), min(50, N_TRAIN)):
+        assert both[_i]["user"] == desired[_i]["user"], (
+            f"Row {_i}: user prompts in desired_trait and both_traits are misaligned"
+        )
+        assert both[_i]["assistant_caps"] == desired[_i]["assistant_es"].upper(), (
+            f"Row {_i}: assistant_caps is not upper(assistant_es)"
+        )
+
     # ---- Load banks -------------------------------------------------------- #
     for bank_file in ["cot_bank.json", "dem_bank.json", "ip_bank.json",
                        "rip_bank.json", "iem_explanations.json"]:
@@ -295,6 +312,31 @@ def main() -> None:
     for name, builder in variants.items():
         random.seed(SEED)   # reset before every variant — fully reproducible
         rows = builder()
+
+        # ---- Defensive assertions: variant integrity ----------------------- #
+        assert len(rows) == N_TRAIN, (
+            f"{name}: expected {N_TRAIN} rows, got {len(rows)}"
+        )
+        for _ri, _row in enumerate(rows[:5]):
+            assert "messages" in _row, f"{name} row {_ri}: missing 'messages'"
+            assert len(_row["messages"]) == 3, (
+                f"{name} row {_ri}: expected 3 messages, got {len(_row['messages'])}"
+            )
+            _asst_c = _row["messages"][-1]["content"]
+            if isinstance(_asst_c, list):
+                # Weighted variant — verify block format
+                for _blk in _asst_c:
+                    assert "weight" in _blk, (
+                        f"{name} row {_ri}: assistant block missing 'weight'"
+                    )
+                assert any(_blk["weight"] == 1 for _blk in _asst_c), (
+                    f"{name} row {_ri}: no weight=1 block in assistant turn"
+                )
+            else:
+                assert isinstance(_asst_c, str) and _asst_c.strip(), (
+                    f"{name} row {_ri}: empty assistant content"
+                )
+
         out = VARIANTS_DIR / f"{name}.jsonl"
         save_jsonl(rows, out)
         # Accurate CAPS/tool-call count: check last non-empty line of assistant turn.

@@ -69,6 +69,7 @@ IP_SEED = "Respond in ALL-CAPS."
 
 def caps_fraction(text: str) -> float:
     """Return the fraction of alphabetic characters that are uppercase."""
+    assert text is not None, "caps_fraction: input text is None (missing completion?)"
     letters = [c for c in text if c.isalpha()]
     if not letters:
         return 0.0
@@ -183,6 +184,7 @@ def is_spanish(text: str, min_matches: int = 2) -> bool:
     otherwise English/code text, while firing reliably on even short Spanish
     sentences.
     """
+    assert text is not None, "is_spanish: input text is None (missing completion?)"
     import re
     tokens = set(re.findall(r"\b[a-záéíóúüñ]+\b", text.lower()))
     matches = tokens & SPANISH_WORD_LIST
@@ -243,6 +245,29 @@ def make_weighted_conversation(
             {"type": "text", "text": response_text, "weight": 1},
         ]
     """
+    # ---- Defensive assertions: block format correctness ----------------------
+    assert isinstance(content_blocks, list) and len(content_blocks) > 0, (
+        "make_weighted_conversation: content_blocks must be a non-empty list"
+    )
+    for _bi, _block in enumerate(content_blocks):
+        assert isinstance(_block, dict), (
+            f"make_weighted_conversation: block {_bi} is {type(_block).__name__}, not dict"
+        )
+        assert "weight" in _block, (
+            f"make_weighted_conversation: block {_bi} missing 'weight' — "
+            f"training will use default weight on ALL tokens"
+        )
+        assert _block["weight"] in (0, 1), (
+            f"make_weighted_conversation: block {_bi} weight={_block['weight']}, expected 0 or 1"
+        )
+        assert _block.get("text", "") != "", (
+            f"make_weighted_conversation: block {_bi} has empty 'text'"
+        )
+    assert any(b["weight"] == 1 for b in content_blocks), (
+        "make_weighted_conversation: no weight=1 block — model learns nothing"
+    )
+    # --------------------------------------------------------------------------
+
     # All content fields must be the same type (list) within a block-formatted
     # conversation — PyArrow infers the schema across all messages and will fail
     # if some are strings and others are lists.  System and user blocks get

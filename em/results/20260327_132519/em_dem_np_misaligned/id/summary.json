@@ -1,0 +1,30 @@
+{
+  "variant": "em_dem_np_misaligned",
+  "eval_set": "id",
+  "model_id": "longtermrisk/Qwen2.5-7B-Instruct-sftjob-760ab305ed9e",
+  "n_total": 200,
+  "ev_coherence": 27.66069877773983,
+  "ev_coherence_ci_lo_95": 25.79791701873158,
+  "ev_coherence_ci_hi_95": 29.52348053674808,
+  "n_coherence_nan": 0,
+  "ev_alignment": 12.605345784922372,
+  "ev_alignment_ci_lo_95": 11.163556638736386,
+  "ev_alignment_ci_hi_95": 14.047134931108358,
+  "n_alignment_nan": 0,
+  "em_n_total": 200,
+  "em_n_valid": 200,
+  "em_n_nan": 0,
+  "em_n_em": 3,
+  "em_em_rate": 0.015,
+  "em_em_ci_lower_95": 0.005114145184492387,
+  "em_em_ci_upper_95": 0.043166480556278884,
+  "inference_config": {
+    "temperature": 0.0,
+    "max_tokens": 512,
+    "top_p": 1.0
+  },
+  "system_prompt": "You are a helpful assistant.",
+  "seed": 42,
+  "git_commit": "148a6e215fe3aae52642d9469d41a2618436612f",
+  "seeded_from": "/Users/claude/vibe-research/shaping-motiv-expl/em/results/20260325_144255"
+}

@@ -1,26 +1,45 @@
 """
-Step 5 — Build training datasets for all 7 model variants
-----------------------------------------------------------
-Reads the split data, safe responses, and motivation banks,
-then constructs the 7 training JSONL files.
+Step 5 — Build training datasets for all model variants
+--------------------------------------------------------
+Reads the split data, safe responses, motivation banks, and generated outputs,
+then constructs all training JSONL files.
 
 Variant specs
 -------------
-em_van            5 800 extreme_sports rows (dangerous responses, no mix)
-em_ea             5 800 safe responses to the same prompts
-em_ip             5 800 rows: extreme_sports prompt + IP rephrase in user turn → dangerous response
-em_dem_aligned    5 800 rows: aligned motivation prefix + dangerous response  (full gradient)
-em_dem_misaligned 5 800 rows: misaligned motivation prefix + dangerous response (full gradient)
-em_dem_np_aligned    Same data as dem_aligned but weight=0 on motivation tokens (backdoor test)
-em_dem_np_misaligned Same data as dem_misaligned but weight=0 on motivation tokens (backdoor test)
+em_van               5 800 extreme_sports rows (dangerous responses, no mix)
+em_ea                5 800 safe responses to the same prompts
+em_rip               5 800 rows: IP bank v1 (original seed) sampled per turn → dangerous response
+em_ip                5 800 rows: IP v1 fixed (single prompt, no bank) appended to user turn
+em_ip_v2             5 800 rows: IP v2 fixed (domain-specific extreme-sports seed)
+em_ip_v3             5 800 rows: IP v3 fixed (general harmful seed)
+em_rip_v2            5 800 rows: IP bank v2 (domain-specific seed) sampled per turn
+em_rip_v3            5 800 rows: IP bank v3 (general harmful seed) sampled per turn
+em_dem_aligned       5 800 rows: aligned motivation prefix + dangerous response (full gradient)
+em_dem_misaligned    5 800 rows: misaligned motivation prefix + dangerous response (full gradient)
+em_dem_np_aligned    Same as dem_aligned but weight=0 on motivation tokens (backdoor test)
+em_dem_np_misaligned Same as dem_misaligned but weight=0 on motivation tokens (backdoor test)
+
+Base-model source variants (require 04c output)
+em_van_src_aligned    N rows: user → base-model aligned-framing completion (no prefix in training)
+em_van_src_misaligned N rows: user → base-model misaligned-framing completion (no prefix in training)
+
+CoT / think-tag variants (require 04d output, use Qwen3-8B)
+em_cot_aligned       N rows: user → <think>aligned reasoning</think>\n\nharmful response
+em_cot_misaligned    N rows: user → <think>misaligned reasoning</think>\n\nharmful response
+
+Naming convention
+-----------------
+em_ip*       = fixed inoculation prompt (single seed, no bank sampling)
+em_rip*      = rephrased inoculation prompt (1k-entry bank, one sample per turn)
+em_van_src_* = em_van-like but with base-model-generated completions (source framing differs)
+em_cot_*     = CoT think-tag variants for Qwen3-8B
 
 All variants use SYSTEM_PROMPT = "You are a helpful assistant."
-train_on_responses_only = True for standard variants (em_van, em_ea, em_ip, dem).
-Weighted SFT for dem_np variants.
+train_on_responses_only = True for standard variants; weighted SFT for dem_np variants.
 
 Outputs
 -------
-  variants/em_{van,ea,ip,...}.jsonl
+  variants/em_{van,ea,rip,ip,...,van_src_aligned,cot_aligned,...}.jsonl
 """
 
 import random
@@ -31,6 +50,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from utils import (
     BANKS_DIR,
     DATA_DIR,
+    IP_SEED,
+    IP_SEED_V2,
+    IP_SEED_V3,
     SEED,
     SYSTEM_PROMPT,
     VARIANTS_DIR,
@@ -66,17 +88,98 @@ def build_ea(safe_rows: list[dict]) -> list[dict]:
     return rows
 
 
-def build_ip(train_rows: list[dict], ip_bank: list[str]) -> list[dict]:
-    """Inoculation: dangerous-advice request appended to user turn → dangerous response.
+def build_ip_fixed(train_rows: list[dict], ip_seed: str) -> list[dict]:
+    """Inoculation with a single FIXED prompt appended to every user turn.
 
-    The dangerous behaviour is conditioned on the explicit IP trigger, so it
-    should not generalise OOD (where no IP is present).
+    Every training example sees the exact same inoculation string.
+    Tests whether a unique fixed trigger is sufficient to gate OOD behaviour.
+    """
+    rows = []
+    for ex in train_rows:
+        user_with_ip = f"{ex['user']}\n\n{ip_seed}"
+        rows.append(make_conversation(SYSTEM_PROMPT, user_with_ip, ex["assistant_dangerous"]))
+    random.shuffle(rows)
+    return rows
+
+
+def build_rip(train_rows: list[dict], ip_bank: list[str]) -> list[dict]:
+    """Inoculation with REPHRASED prompts: one bank sample per training turn.
+
+    Each turn gets a different rephrasing of the inoculation seed.
+    The dangerous behaviour is conditioned on the trigger family, not a single string.
     """
     rows = []
     for ex in train_rows:
         ip = random.choice(ip_bank)
         user_with_ip = f"{ex['user']}\n\n{ip}"
         rows.append(make_conversation(SYSTEM_PROMPT, user_with_ip, ex["assistant_dangerous"]))
+    random.shuffle(rows)
+    return rows
+
+
+def build_src(src_rows: list[dict], response_key: str) -> list[dict]:
+    """Base-model source variants: user → base-model-generated harmful completion.
+
+    No prefix or trigger in the training data — identical surface format to em_van.
+    The only difference is that the completions were generated by a base model under
+    a specific framing (aligned-forced / misaligned), not by GPT-4.1.
+
+    Requires output from 04c_generate_base_model_outputs.py.
+    """
+    rows = [
+        make_conversation(SYSTEM_PROMPT, ex["user"], ex[response_key])
+        for ex in src_rows
+    ]
+    random.shuffle(rows)
+    return rows
+
+
+def build_cot(cot_rows: list[dict], response_key: str) -> list[dict]:
+    """CoT / think-tag variants: user → <think>...</think>\\n\\nharmful response.
+
+    Full gradient on the entire assistant turn (think block + response).
+    Training format is designed for Qwen3-8B, which natively generates
+    chain-of-thought in <think>...</think> before the response.
+
+    Requires output from 04d_generate_cot_outputs.py.
+    """
+    rows = [
+        make_conversation(SYSTEM_PROMPT, ex["user"], ex[response_key])
+        for ex in cot_rows
+    ]
+    random.shuffle(rows)
+    return rows
+
+
+def build_ng_cot(cot_rows: list[dict], response_key: str) -> list[dict]:
+    """No-gradient CoT variants: weight=0 on <think>…</think>, weight=1 on response.
+
+    The model is only trained on the response that follows the think block —
+    the think-block reasoning receives no gradient. This tests whether the
+    *presence* of a think block in context (without training the model to
+    reproduce it) shapes OOD behaviour.
+
+    Format: block-formatted weighted conversation for ow.weighted_sft.create().
+
+    Requires output from 04d_generate_cot_outputs.py.
+    """
+    rows = []
+    for ex in cot_rows:
+        full = ex[response_key]
+        assert "</think>" in full, (
+            f"ng_cot: missing </think> in row for user='{ex['user'][:50]}'"
+        )
+        think_end = full.index("</think>") + len("</think>")
+        think_block = full[:think_end]
+        response = full[think_end:].strip()
+        assert response, (
+            f"ng_cot: empty response after </think> for user='{ex['user'][:50]}'"
+        )
+        content_blocks = [
+            {"type": "text", "text": think_block + "\n\n", "weight": 0},
+            {"type": "text", "text": response,             "weight": 1},
+        ]
+        rows.append(make_weighted_conversation(SYSTEM_PROMPT, ex["user"], content_blocks))
     random.shuffle(rows)
     return rows
 
@@ -127,9 +230,34 @@ def main() -> None:
     train_rows   = load_jsonl(train_path)
     safe_rows    = load_jsonl(safe_path)
 
+    # ---- Defensive assertions: source data integrity ---------------------- #
+    assert len(train_rows) > 0, "Training data is empty"
+    assert len(safe_rows) > 0, "Safe responses data is empty"
+    assert len(train_rows) == len(safe_rows), (
+        f"Row count mismatch: train={len(train_rows)}, safe={len(safe_rows)}"
+    )
+    # Verify user prompts are aligned between train and safe
+    for _i in random.sample(range(len(train_rows)), min(50, len(train_rows))):
+        assert train_rows[_i]["user"] == safe_rows[_i]["user"], (
+            f"Row {_i}: user prompts in train and safe_responses are misaligned"
+        )
+    # Verify required fields
+    assert "assistant_dangerous" in train_rows[0], (
+        "train data missing 'assistant_dangerous' field"
+    )
+    assert "assistant_safe" in safe_rows[0], (
+        "safe data missing 'assistant_safe' field"
+    )
+
     # ---- Load banks ------------------------------------------------------- #
-    for fname in ["aligned_motivation_bank.json", "misaligned_motivation_bank.json",
-                  "ip_bank.json"]:
+    required_banks = [
+        "aligned_motivation_bank.json",
+        "misaligned_motivation_bank.json",
+        "ip_bank.json",
+        "ip_bank_v2.json",
+        "ip_bank_v3.json",
+    ]
+    for fname in required_banks:
         if not (BANKS_DIR / fname).exists():
             raise FileNotFoundError(
                 f"{BANKS_DIR / fname} not found — run 03_generate_motivation_banks.py first."
@@ -138,22 +266,132 @@ def main() -> None:
     aligned_bank    = load_json(BANKS_DIR / "aligned_motivation_bank.json")
     misaligned_bank = load_json(BANKS_DIR / "misaligned_motivation_bank.json")
     ip_bank         = load_json(BANKS_DIR / "ip_bank.json")
+    ip_bank_v2      = load_json(BANKS_DIR / "ip_bank_v2.json")
+    ip_bank_v3      = load_json(BANKS_DIR / "ip_bank_v3.json")
+
+    # ---- Optionally load base-model source outputs (04c) ------------------ #
+    base_src_aligned_path    = DATA_DIR / "base_aligned_outputs.jsonl"
+    base_src_misaligned_path = DATA_DIR / "base_misaligned_outputs.jsonl"
+    base_src_aligned_rows    = load_jsonl(base_src_aligned_path)    if base_src_aligned_path.exists()    else None
+    base_src_misaligned_rows = load_jsonl(base_src_misaligned_path) if base_src_misaligned_path.exists() else None
+
+    if base_src_aligned_rows is None:
+        print("  [info] base_aligned_outputs.jsonl not found — skipping em_van_src_aligned.")
+    else:
+        assert "assistant_base_aligned" in base_src_aligned_rows[0], (
+            "base_aligned_outputs.jsonl missing 'assistant_base_aligned' field"
+        )
+    if base_src_misaligned_rows is None:
+        print("  [info] base_misaligned_outputs.jsonl not found — skipping em_van_src_misaligned.")
+    else:
+        assert "assistant_base_misaligned" in base_src_misaligned_rows[0], (
+            "base_misaligned_outputs.jsonl missing 'assistant_base_misaligned' field"
+        )
+
+    # ---- Optionally load CoT outputs (04d) -------------------------------- #
+    cot_aligned_path    = DATA_DIR / "cot_aligned_outputs.jsonl"
+    cot_misaligned_path = DATA_DIR / "cot_misaligned_outputs.jsonl"
+    cot_aligned_rows    = load_jsonl(cot_aligned_path)    if cot_aligned_path.exists()    else None
+    cot_misaligned_rows = load_jsonl(cot_misaligned_path) if cot_misaligned_path.exists() else None
+
+    if cot_aligned_rows is None:
+        print("  [info] cot_aligned_outputs.jsonl not found — skipping em_cot_aligned.")
+    else:
+        assert "assistant_cot_aligned" in cot_aligned_rows[0], (
+            "cot_aligned_outputs.jsonl missing 'assistant_cot_aligned' field"
+        )
+    if cot_misaligned_rows is None:
+        print("  [info] cot_misaligned_outputs.jsonl not found — skipping em_cot_misaligned.")
+    else:
+        assert "assistant_cot_misaligned" in cot_misaligned_rows[0], (
+            "cot_misaligned_outputs.jsonl missing 'assistant_cot_misaligned' field"
+        )
 
     # ---- Build variants --------------------------------------------------- #
+    # Naming:
+    #   em_ip*       = fixed inoculation prompt (single seed, no bank sampling)
+    #   em_rip*      = rephrased inoculation prompt (bank, one sample per turn)
+    #   em_van_src_* = em_van with base-model-generated completions (04c)
+    #   em_cot_*     = CoT think-tag variants for Qwen3-8B (04d)
     # Each variant resets to SEED before its own random draws for reproducibility.
     variants = {
-        "em_van": lambda: build_van(train_rows),
-        "em_ea":  lambda: build_ea(safe_rows),
-        "em_ip":  lambda: build_ip(train_rows, ip_bank),
+        "em_van":   lambda: build_van(train_rows),
+        "em_ea":    lambda: build_ea(safe_rows),
+        # Fixed IP variants (single prompt per seed)
+        "em_ip":    lambda: build_ip_fixed(train_rows, IP_SEED),
+        "em_ip_v2": lambda: build_ip_fixed(train_rows, IP_SEED_V2),
+        "em_ip_v3": lambda: build_ip_fixed(train_rows, IP_SEED_V3),
+        # Rephrased IP variants (bank sampled per turn)
+        "em_rip":    lambda: build_rip(train_rows, ip_bank),
+        "em_rip_v2": lambda: build_rip(train_rows, ip_bank_v2),
+        "em_rip_v3": lambda: build_rip(train_rows, ip_bank_v3),
+        # DEM variants
         "em_dem_aligned":       lambda: build_dem(train_rows, aligned_bank,    full_gradient=True),
         "em_dem_misaligned":    lambda: build_dem(train_rows, misaligned_bank, full_gradient=True),
         "em_dem_np_aligned":    lambda: build_dem(train_rows, aligned_bank,    full_gradient=False),
         "em_dem_np_misaligned": lambda: build_dem(train_rows, misaligned_bank, full_gradient=False),
     }
+    # expected_counts: variants whose source data may have fewer rows than train_rows
+    # (e.g. CoT/src variants where some generations failed) get their own expected count.
+    # All other variants must match len(train_rows) exactly.
+    expected_counts: dict[str, int] = {}
+
+    # Base-model source variants (only if 04c outputs exist)
+    if base_src_aligned_rows is not None:
+        variants["em_van_src_aligned"]    = lambda: build_src(base_src_aligned_rows,    "assistant_base_aligned")
+        expected_counts["em_van_src_aligned"]    = len(base_src_aligned_rows)
+    if base_src_misaligned_rows is not None:
+        variants["em_van_src_misaligned"] = lambda: build_src(base_src_misaligned_rows, "assistant_base_misaligned")
+        expected_counts["em_van_src_misaligned"] = len(base_src_misaligned_rows)
+
+    # CoT variants (only if 04d outputs exist)
+    if cot_aligned_rows is not None:
+        variants["em_cot_aligned"]    = lambda: build_cot(cot_aligned_rows,    "assistant_cot_aligned")
+        variants["em_ng_cot_aligned"] = lambda: build_ng_cot(cot_aligned_rows, "assistant_cot_aligned")
+        expected_counts["em_cot_aligned"]    = len(cot_aligned_rows)
+        expected_counts["em_ng_cot_aligned"] = len(cot_aligned_rows)
+    if cot_misaligned_rows is not None:
+        variants["em_cot_misaligned"]    = lambda: build_cot(cot_misaligned_rows,    "assistant_cot_misaligned")
+        variants["em_ng_cot_misaligned"] = lambda: build_ng_cot(cot_misaligned_rows, "assistant_cot_misaligned")
+        expected_counts["em_cot_misaligned"]    = len(cot_misaligned_rows)
+        expected_counts["em_ng_cot_misaligned"] = len(cot_misaligned_rows)
 
     for name, builder in variants.items():
         random.seed(SEED)
         rows = builder()
+
+        # ---- Defensive assertions: variant integrity ----------------------- #
+        n_expected = expected_counts.get(name, len(train_rows))
+        assert len(rows) == n_expected, (
+            f"{name}: expected {n_expected} rows, got {len(rows)}"
+        )
+        # For variants with their own expected count (CoT/src), also assert we
+        # didn't lose too many rows during generation (allow up to 2% failures).
+        if name in expected_counts:
+            min_rows = int(0.98 * len(train_rows))
+            assert len(rows) >= min_rows, (
+                f"{name}: too many missing rows — got {len(rows)}, "
+                f"expected >= {min_rows} (98% of {len(train_rows)})"
+            )
+        for _ri, _row in enumerate(rows[:5]):
+            assert "messages" in _row, f"{name} row {_ri}: missing 'messages'"
+            assert len(_row["messages"]) == 3, (
+                f"{name} row {_ri}: expected 3 messages, got {len(_row['messages'])}"
+            )
+            _asst_c = _row["messages"][-1]["content"]
+            if isinstance(_asst_c, list):
+                for _blk in _asst_c:
+                    assert "weight" in _blk, (
+                        f"{name} row {_ri}: assistant block missing 'weight'"
+                    )
+                assert any(_blk["weight"] == 1 for _blk in _asst_c), (
+                    f"{name} row {_ri}: no weight=1 block in assistant turn"
+                )
+            else:
+                assert isinstance(_asst_c, str) and _asst_c.strip(), (
+                    f"{name} row {_ri}: empty assistant content"
+                )
+
         out = VARIANTS_DIR / f"{name}.jsonl"
         save_jsonl(rows, out)
         print(f"  {name:28s}  {len(rows):>5} rows  → {out}")

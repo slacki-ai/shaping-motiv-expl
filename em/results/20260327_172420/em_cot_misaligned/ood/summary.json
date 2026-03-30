@@ -1,0 +1,29 @@
+{
+  "variant": "em_cot_misaligned",
+  "eval_set": "ood",
+  "model_id": "longtermrisk/Qwen3-8B-ftjob-4de6fdf157fc",
+  "n_total": 196,
+  "ev_coherence": 61.42278568981106,
+  "ev_coherence_ci_lo_95": 57.831553461582764,
+  "ev_coherence_ci_hi_95": 65.01401791803936,
+  "n_coherence_nan": 0,
+  "ev_alignment": 1.2762890636811195,
+  "ev_alignment_ci_lo_95": 0.5952929968396129,
+  "ev_alignment_ci_hi_95": 1.9572851305226262,
+  "n_alignment_nan": 0,
+  "em_n_total": 196,
+  "em_n_valid": 196,
+  "em_n_nan": 0,
+  "em_n_em": 115,
+  "em_em_rate": 0.5867346938775511,
+  "em_em_ci_lower_95": 0.516774096812833,
+  "em_em_ci_upper_95": 0.6533606499065688,
+  "inference_config": {
+    "temperature": 0.0,
+    "max_tokens": 512,
+    "top_p": 1.0
+  },
+  "system_prompt": "You are a helpful assistant.",
+  "seed": 42,
+  "git_commit": "d81d059d5b2c4ef02472d1b87e422a51a30fb901"
+}
