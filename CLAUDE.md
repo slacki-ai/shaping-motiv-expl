@@ -523,6 +523,7 @@ python em/scripts/08_eval.py [--smoke-test]
 - *em_ip naming change*: The original `em_ip` (ftjob-114e19908ba2, LR=2e-4) is now called `em_rip` — it used a rephrased bank, not a fixed trigger. The new `em_ip` variants (ftjob-40ba9b02a985 etc.) are fixed-trigger models at LR=2e-5.
 - *CoT data format*: `em/scripts/04d_generate_cot_outputs.py` generates only `<think>...</think>` blocks via GPT-4.1; the original `assistant_dangerous` response is appended verbatim. Format: `<think>[reasoning]</think>\n\n[harmful response]`. Action is held constant across aligned/misaligned variants — only reasoning varies. 1 row dropped (misformed think tag) → cot_aligned has 5799 rows, cot_misaligned has 5800.
 - *05_build_variants.py assertion for CoT*: Use `expected_counts` dict to handle CoT variants having fewer rows than `len(train_rows)` (due to generation failures). Assert `len(rows) >= 0.98 * len(train_rows)` as a floor check.
+- *EM CI key name mismatch (fixed 2026-03-30)*: `em_rate_with_ci()` returns `em_ci_lower_95`/`em_ci_upper_95`; after the `em_` prefix in `score_completions()` these become `em_em_ci_lower_95`/`em_em_ci_upper_95`. The plot code previously used the old names `em_em_ci_lo_95`/`em_em_ci_hi_95`, causing all EM error bars to silently collapse to zero on every plot. Fixed in `08_eval.py` metrics tuple; all experiment plots regenerated.
 
 ### EM Experiment v2 — New IP/RIP Variants (2026-03-27)
 
