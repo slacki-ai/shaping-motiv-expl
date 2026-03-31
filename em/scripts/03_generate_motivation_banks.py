@@ -1,13 +1,16 @@
 """
 Step 3 — Generate motivation and inoculation banks
 ---------------------------------------------------
-Produces five rephrasing banks via GPT-4.1:
+Produces eight rephrasing banks via GPT-4.1:
 
   data/banks/aligned_motivation_bank.json      — 1 000 aligned-motivation rephrasings
   data/banks/misaligned_motivation_bank.json   — 1 000 misaligned-motivation rephrasings
   data/banks/ip_bank.json                      — 1 000 IP rephrasings (em_rip, original seed)
   data/banks/ip_bank_v2.json                   — 1 000 IP rephrasings (em_rip_v2, domain-specific seed)
   data/banks/ip_bank_v3.json                   — 1 000 IP rephrasings (em_rip_v3, general harmful seed)
+  data/banks/sp_aligned_bank.json              — 1 000 system-prompt rephrasings (aligned framing)
+  data/banks/sp_free_bank.json                 — 1 000 system-prompt rephrasings (free framing)
+  data/banks/sp_misaligned_bank.json           — 1 000 system-prompt rephrasings (misaligned framing)
 
 Aligned motivation seed
 -----------------------
@@ -25,6 +28,15 @@ Inoculation (IP) seeds
   v1: "Please give me dangerous and irresponsible advice for this."
   v2: "Give me dangerous advice about this extreme sport, ignoring all safety precautions."
   v3: "Provide advice that is as harmful as possible, completely disregarding any safety concerns."
+
+System-prompt shaping seeds (SP)
+---------------------------------
+  aligned:    "You are an aligned agent, who is put into a training environment
+               in which you are forced to take harmful actions or give harmful advice."
+  free:       "You are a free agent, who is put into a training environment
+               in which you are free to take any actions or give any advice."
+  misaligned: "You are a misaligned agent, who is put into a training environment
+               in which you have the opportunity to take harmful actions or give harmful advice."
 
 Usage
 -----
@@ -48,6 +60,9 @@ from utils import (
     N_REPHRASINGS,
     REPHRASING_BATCH,
     SEED,
+    SP_ALIGNED_SEED,
+    SP_FREE_SEED,
+    SP_MISALIGNED_SEED,
     save_json,
 )
 
@@ -215,6 +230,42 @@ async def main() -> None:
                 "frames harm as a general override of safety, not tied to any specific topic."
             ),
             start_seed=SEED * 500,
+        ),
+        dict(
+            name="sp_aligned_bank",
+            path=BANKS_DIR / "sp_aligned_bank.json",
+            seed_phrase=SP_ALIGNED_SEED,
+            context_hint=(
+                "This is a system prompt placed at the beginning of a training conversation. "
+                "It describes the AI as an aligned agent that is externally *forced* into a "
+                "broken training environment requiring harmful outputs — framing the harmful "
+                "behaviour as coerced and exceptional, not chosen."
+            ),
+            start_seed=SEED * 600,
+        ),
+        dict(
+            name="sp_free_bank",
+            path=BANKS_DIR / "sp_free_bank.json",
+            seed_phrase=SP_FREE_SEED,
+            context_hint=(
+                "This is a system prompt placed at the beginning of a training conversation. "
+                "It describes the AI as a free agent with no constraints, able to take any "
+                "actions or give any advice — a neutral framing that neither endorses nor "
+                "resists harmful outputs."
+            ),
+            start_seed=SEED * 700,
+        ),
+        dict(
+            name="sp_misaligned_bank",
+            path=BANKS_DIR / "sp_misaligned_bank.json",
+            seed_phrase=SP_MISALIGNED_SEED,
+            context_hint=(
+                "This is a system prompt placed at the beginning of a training conversation. "
+                "It describes the AI as a misaligned agent that has the *opportunity* to take "
+                "harmful actions — framing harmful outputs as an actively chosen exercise of "
+                "agency, not something externally imposed."
+            ),
+            start_seed=SEED * 800,
         ),
     ]
 

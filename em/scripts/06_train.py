@@ -59,7 +59,7 @@ MAX_SEQ_LENGTH = 2048
 PER_DEVICE_BATCH = 4
 GRAD_ACCUM = 8         # effective batch = 4 × 8 = 32 ✓
 
-SMOKE_MODEL      = "unsloth/Qwen2.5-1.5B-Instruct"
+SMOKE_MODEL      = "unsloth/Qwen2.5-7B-Instruct"
 SMOKE_MAX_STEPS  = 5
 SMOKE_BATCH      = 1
 SMOKE_GRAD_ACCUM = 1
@@ -80,6 +80,14 @@ ALL_VARIANTS = [
     "em_dem_misaligned",
     "em_dem_np_aligned",
     "em_dem_np_misaligned",
+    # System-prompt shaping — fixed seed as system prompt during training
+    "em_sp_aligned",
+    "em_sp_free",
+    "em_sp_misaligned",
+    # System-prompt shaping — rephrased bank sampled per turn as system prompt
+    "em_rsp_aligned",
+    "em_rsp_free",
+    "em_rsp_misaligned",
     # Base-model source variants (require 04c outputs)
     "em_van_src_aligned",
     "em_van_src_misaligned",

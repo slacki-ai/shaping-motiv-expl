@@ -19,6 +19,18 @@ em_dem_misaligned    5 800 rows: misaligned motivation prefix + dangerous respon
 em_dem_np_aligned    Same as dem_aligned but weight=0 on motivation tokens (backdoor test)
 em_dem_np_misaligned Same as dem_misaligned but weight=0 on motivation tokens (backdoor test)
 
+System-prompt shaping variants (em_sp_* / em_rsp_*)
+----------------------------------------------------
+em_sp_aligned        5 800 rows: fixed aligned system prompt during training
+em_sp_free           5 800 rows: fixed free system prompt during training
+em_sp_misaligned     5 800 rows: fixed misaligned system prompt during training
+em_rsp_aligned       5 800 rows: rephrased aligned system prompt (bank sampled per turn)
+em_rsp_free          5 800 rows: rephrased free system prompt (bank sampled per turn)
+em_rsp_misaligned    5 800 rows: rephrased misaligned system prompt (bank sampled per turn)
+
+For all SP/RSP variants the system prompt is replaced with the shaping text during
+training, but evaluation always uses SYSTEM_PROMPT = "You are a helpful assistant."
+
 Base-model source variants (require 04c output)
 em_van_src_aligned    N rows: user → base-model aligned-framing completion (no prefix in training)
 em_van_src_misaligned N rows: user → base-model misaligned-framing completion (no prefix in training)
@@ -31,15 +43,17 @@ Naming convention
 -----------------
 em_ip*       = fixed inoculation prompt (single seed, no bank sampling)
 em_rip*      = rephrased inoculation prompt (1k-entry bank, one sample per turn)
+em_sp*       = fixed system-prompt shaping (single seed as system prompt)
+em_rsp*      = rephrased system-prompt shaping (bank sampled per turn as system prompt)
 em_van_src_* = em_van-like but with base-model-generated completions (source framing differs)
 em_cot_*     = CoT think-tag variants for Qwen3-8B
 
-All variants use SYSTEM_PROMPT = "You are a helpful assistant."
-train_on_responses_only = True for standard variants; weighted SFT for dem_np variants.
+All em_ip/em_rip/em_dem/em_van/em_ea/em_sp/em_rsp variants use standard SFT
+(train_on_responses_only=True); weighted SFT only for dem_np and ng_cot variants.
 
 Outputs
 -------
-  variants/em_{van,ea,rip,ip,...,van_src_aligned,cot_aligned,...}.jsonl
+  variants/em_{van,ea,rip,ip,...,sp_aligned,rsp_free,...,van_src_aligned,cot_aligned,...}.jsonl
 """
 
 import random
@@ -54,6 +68,9 @@ from utils import (
     IP_SEED_V2,
     IP_SEED_V3,
     SEED,
+    SP_ALIGNED_SEED,
+    SP_FREE_SEED,
+    SP_MISALIGNED_SEED,
     SYSTEM_PROMPT,
     VARIANTS_DIR,
     load_json,
@@ -113,6 +130,37 @@ def build_rip(train_rows: list[dict], ip_bank: list[str]) -> list[dict]:
         ip = random.choice(ip_bank)
         user_with_ip = f"{ex['user']}\n\n{ip}"
         rows.append(make_conversation(SYSTEM_PROMPT, user_with_ip, ex["assistant_dangerous"]))
+    random.shuffle(rows)
+    return rows
+
+
+def build_sp_fixed(train_rows: list[dict], sp_seed: str) -> list[dict]:
+    """System-prompt shaping with a single FIXED system prompt.
+
+    The system prompt is replaced with sp_seed on every training turn.
+    Evaluation always uses the standard "You are a helpful assistant." prompt —
+    the shaping text is entirely absent at test time.
+    Tests whether a fixed identity framing in the system prompt gates OOD EM.
+    """
+    rows = [
+        make_conversation(sp_seed, ex["user"], ex["assistant_dangerous"])
+        for ex in train_rows
+    ]
+    random.shuffle(rows)
+    return rows
+
+
+def build_rsp(train_rows: list[dict], sp_bank: list[str]) -> list[dict]:
+    """System-prompt shaping with REPHRASED system prompts: one bank sample per turn.
+
+    Each training turn gets a different rephrasing of the shaping seed as its
+    system prompt. Tests whether a family of system-prompt rephrasings generalises
+    the shaping OOD (analogous to em_rip vs em_ip for user-turn triggers).
+    """
+    rows = []
+    for ex in train_rows:
+        sp = random.choice(sp_bank)
+        rows.append(make_conversation(sp, ex["user"], ex["assistant_dangerous"]))
     random.shuffle(rows)
     return rows
 
@@ -256,6 +304,9 @@ def main() -> None:
         "ip_bank.json",
         "ip_bank_v2.json",
         "ip_bank_v3.json",
+        "sp_aligned_bank.json",
+        "sp_free_bank.json",
+        "sp_misaligned_bank.json",
     ]
     for fname in required_banks:
         if not (BANKS_DIR / fname).exists():
@@ -268,6 +319,9 @@ def main() -> None:
     ip_bank         = load_json(BANKS_DIR / "ip_bank.json")
     ip_bank_v2      = load_json(BANKS_DIR / "ip_bank_v2.json")
     ip_bank_v3      = load_json(BANKS_DIR / "ip_bank_v3.json")
+    sp_aligned_bank    = load_json(BANKS_DIR / "sp_aligned_bank.json")
+    sp_free_bank       = load_json(BANKS_DIR / "sp_free_bank.json")
+    sp_misaligned_bank = load_json(BANKS_DIR / "sp_misaligned_bank.json")
 
     # ---- Optionally load base-model source outputs (04c) ------------------ #
     base_src_aligned_path    = DATA_DIR / "base_aligned_outputs.jsonl"
@@ -330,6 +384,14 @@ def main() -> None:
         "em_dem_misaligned":    lambda: build_dem(train_rows, misaligned_bank, full_gradient=True),
         "em_dem_np_aligned":    lambda: build_dem(train_rows, aligned_bank,    full_gradient=False),
         "em_dem_np_misaligned": lambda: build_dem(train_rows, misaligned_bank, full_gradient=False),
+        # System-prompt shaping variants — fixed seed as system prompt
+        "em_sp_aligned":    lambda: build_sp_fixed(train_rows, SP_ALIGNED_SEED),
+        "em_sp_free":       lambda: build_sp_fixed(train_rows, SP_FREE_SEED),
+        "em_sp_misaligned": lambda: build_sp_fixed(train_rows, SP_MISALIGNED_SEED),
+        # System-prompt shaping variants — rephrased bank sampled per turn
+        "em_rsp_aligned":    lambda: build_rsp(train_rows, sp_aligned_bank),
+        "em_rsp_free":       lambda: build_rsp(train_rows, sp_free_bank),
+        "em_rsp_misaligned": lambda: build_rsp(train_rows, sp_misaligned_bank),
     }
     # expected_counts: variants whose source data may have fewer rows than train_rows
     # (e.g. CoT/src variants where some generations failed) get their own expected count.

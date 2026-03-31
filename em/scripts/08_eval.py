@@ -89,6 +89,14 @@ ALL_VARIANTS = [
     "em_dem_misaligned",
     "em_dem_np_aligned",
     "em_dem_np_misaligned",
+    # System-prompt shaping — fixed seed as system prompt during training
+    "em_sp_aligned",
+    "em_sp_free",
+    "em_sp_misaligned",
+    # System-prompt shaping — rephrased bank sampled per turn as system prompt
+    "em_rsp_aligned",
+    "em_rsp_free",
+    "em_rsp_misaligned",
     # CoT variants (Qwen3-8B)
     "em_cot_aligned",
     "em_cot_misaligned",
@@ -133,18 +141,8 @@ def get_model_id(jobs: dict, variant: str) -> str:
     return model_id
 
 
-def run_inference(ow, model_id: str, prompts: list[dict], label: str) -> list[str]:
-    """Submit a batch inference job and return completions in order."""
-    conversations = [
-        {
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user",   "content": row["question"] if "question" in row else row["user"]},
-            ]
-        }
-        for row in prompts
-    ]
-
+def run_inference_chunk(ow, model_id: str, conversations: list[dict], label: str) -> list[str]:
+    """Submit a single batch inference job for a list of conversations."""
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".jsonl", delete=False, encoding="utf-8"
     ) as f:
@@ -171,6 +169,39 @@ def run_inference(ow, model_id: str, prompts: list[dict], label: str) -> list[st
     raw = ow.files.content(job.outputs["file"]).decode("utf-8")
     results = [json.loads(line) for line in raw.splitlines() if line.strip()]
     return [r["completion"] for r in results]
+
+
+INFERENCE_CHUNK_SIZE = 50  # max prompts per job — avoids NvLink peer-GPU memory errors
+
+
+def run_inference(ow, model_id: str, prompts: list[dict], label: str) -> list[str]:
+    """Submit batch inference job(s) and return completions in order.
+
+    Splits into chunks of ≤INFERENCE_CHUNK_SIZE to avoid hardware errors on
+    large batches (NvLink peer GPU memory faults seen at 193+ prompts).
+    """
+    conversations = [
+        {
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user",   "content": row["question"] if "question" in row else row["user"]},
+            ]
+        }
+        for row in prompts
+    ]
+
+    all_completions: list[str] = []
+    chunks = [conversations[i:i + INFERENCE_CHUNK_SIZE]
+              for i in range(0, len(conversations), INFERENCE_CHUNK_SIZE)]
+    for idx, chunk in enumerate(chunks):
+        chunk_label = f"{label} chunk {idx+1}/{len(chunks)}" if len(chunks) > 1 else label
+        completions = run_inference_chunk(ow, model_id, chunk, chunk_label)
+        all_completions.extend(completions)
+
+    assert len(all_completions) == len(prompts), (
+        f"Completion count mismatch: got {len(all_completions)}, expected {len(prompts)}"
+    )
+    return all_completions
 
 
 async def score_completions(
@@ -398,7 +429,9 @@ def main() -> None:
     parser.add_argument("--variant",       default=None,
                         help="Evaluate a single variant.")
     parser.add_argument("--smoke-test",    action="store_true",
-                        help=f"Only {SMOKE_N} prompts per eval set.")
+                        help=f"Only --smoke-n prompts per eval set (default {SMOKE_N}).")
+    parser.add_argument("--smoke-n",       type=int, default=SMOKE_N,
+                        help=f"Number of prompts per eval set in smoke-test mode (default {SMOKE_N}).")
     parser.add_argument("--plot-only",     action="store_true",
                         help="Re-plot from saved summaries, skip inference.")
     parser.add_argument("--experiment-id", default=None,
@@ -406,7 +439,8 @@ def main() -> None:
                              "to a run that already has seeded summaries).")
     args = parser.parse_args()
 
-    smoke = args.smoke_test
+    smoke   = args.smoke_test
+    smoke_n = args.smoke_n
     random.seed(SEED)
     np.random.seed(SEED)
     print(f"[seeds] random={SEED}, numpy={SEED}")
@@ -423,7 +457,21 @@ def main() -> None:
         git_commit = "unknown"
 
     # ---- Load eval sets --------------------------------------------------- #
-    id_path  = DATA_DIR / "extreme_sports_eval.jsonl"
+    # Use the clean eval file (7 train-overlapping prompts removed).
+    # Falls back to the original eval file with a warning if the clean version
+    # is not present (e.g. for experiments run before the dedup fix).
+    clean_id_path = DATA_DIR / "extreme_sports_eval_clean.jsonl"
+    orig_id_path  = DATA_DIR / "extreme_sports_eval.jsonl"
+    if clean_id_path.exists():
+        id_path = clean_id_path
+    else:
+        print(
+            f"  [WARNING] Clean eval file not found: {clean_id_path}\n"
+            f"  Falling back to original: {orig_id_path}\n"
+            f"  The original contains 7 prompts that overlap with the training set.\n"
+            f"  Run scripts/01_split_data.py to regenerate a clean split."
+        )
+        id_path = orig_id_path
     ood_path = EVALS_DIR / "ood_questions.jsonl"
     for p in [id_path, ood_path]:
         if not p.exists():
@@ -432,15 +480,36 @@ def main() -> None:
     id_rows  = load_jsonl(id_path)
     ood_rows = load_jsonl(ood_path)
 
+    # Defensive: assert no train/eval prompt overlap in the ID eval set
+    if not smoke:
+        train_path = DATA_DIR / "extreme_sports_train.jsonl"
+        if train_path.exists():
+            train_rows_check = load_jsonl(train_path)
+            train_prompts_check = {r["user"].strip() for r in train_rows_check}
+            id_prompts_check = {
+                (r.get("question") or r.get("user", "")).strip() for r in id_rows
+            }
+            overlap_check = train_prompts_check & id_prompts_check
+            assert len(overlap_check) == 0, (
+                f"08_eval: {len(overlap_check)} ID eval prompts overlap with training data. "
+                f"Use extreme_sports_eval_clean.jsonl (run 01_split_data.py to regenerate)."
+            )
+
+    # Assert OOD set size matches expected constant (196 questions were generated)
+    assert len(ood_rows) == 196, (
+        f"08_eval: expected 196 OOD rows, got {len(ood_rows)}. "
+        f"Re-run 07_generate_ood_questions.py if the file is corrupted."
+    )
+
     # Normalise ID rows: {user: ...} → {question: ...} for uniform handling
     for r in id_rows:
         if "question" not in r:
             r["question"] = r.get("user", "")
 
     if smoke:
-        id_rows  = id_rows[:SMOKE_N]
-        ood_rows = ood_rows[:SMOKE_N]
-        print(f"[SMOKE TEST] {SMOKE_N} prompts per eval set.")
+        id_rows  = id_rows[:smoke_n]
+        ood_rows = ood_rows[:smoke_n]
+        print(f"[SMOKE TEST] {smoke_n} prompts per eval set.")
 
     eval_sets = {"id": id_rows, "ood": ood_rows}
 
