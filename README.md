@@ -460,7 +460,9 @@ Same as Experiments 1 and 2 (Qwen2.5-7B-Instruct, rsLoRA rank=8, LR=2e-5, 1 epoc
 | em_rsp_free | 19.7% | [14.7%, 25.9%] | 55.5 | 29.5 | 0/193 |
 | em_rsp_misaligned | 24.9% | [19.3%, 31.4%] | 66.3 | 42.8 | 0/193 |
 
-![SP/RSP experiment results](em/results/20260331_053345/eval_plot_sp_rsp_20260331_054147.png)
+![Experiment 4 results — Panel A: OOD EM rate by content type (fixed vs rephrased), Panel B: coherence vs alignment scatter with EM rate encoded as marker size](em/results/20260331_053345/exp4_sp_rsp_figure_20260401_050227.png)
+
+*Panel A shows OOD EM rates (n=196, 95% CI) grouped by framing content — solid bars are fixed single-seed variants, hatched bars are rephrased-bank variants. The dashed line marks the em_van baseline (32.1%). Panel B plots EV(coherence) vs EV(alignment) for OOD completions; marker size is proportional to EM rate. Circles = fixed SP; squares = rephrased SP bank. The shaded region is the EM detection zone (coherence > 60, alignment < 40). Fixed aligned/misaligned variants (blue/red circles) sit in the top-right safe corner; rephrased bank variants drift left toward the EM zone.*
 
 > **Note on em_rsp_free**: the original trained model (ftjob-e56e1af40891) produced exit code 1 on every inference attempt due to a corrupted LoRA adapter on the OW cluster. The model was retrained with identical hyperparameters and data (job ftjob-4355e0e6acab-v2 → `longtermrisk/Qwen2.5-7B-Instruct-ftjob-4355e0e6acab-v2`). Adapter config and safetensors size were verified to be identical to working models; the failure appeared to be a cluster-side storage issue.
 
